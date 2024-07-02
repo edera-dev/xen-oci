@@ -1,0 +1,18 @@
+diff --git a/tools/ocaml/xenstored/Makefile b/tools/ocaml/xenstored/Makefile
+index e8aaecf2e6..3be043f947 100644
+--- a/tools/ocaml/xenstored/Makefile
++++ b/tools/ocaml/xenstored/Makefile
+@@ -67,7 +67,12 @@ XENSTOREDLIBS = \
+ 	-ccopt -L -ccopt $(OCAML_TOPLEVEL)/libs/eventchn $(OCAML_TOPLEVEL)/libs/eventchn/xeneventchn.cmxa \
+ 	-ccopt -L -ccopt $(OCAML_TOPLEVEL)/libs/xc $(OCAML_TOPLEVEL)/libs/xc/xenctrl.cmxa \
+ 	-ccopt -L -ccopt $(OCAML_TOPLEVEL)/libs/xb $(OCAML_TOPLEVEL)/libs/xb/xenbus.cmxa \
+-	-ccopt -L -ccopt $(XEN_ROOT)/tools/libs/ctrl
++	-ccopt -L -ccopt $(XEN_ROOT)/tools/libs/ctrl \
++	-cclib $(XEN_ROOT)/tools/libs/call/libxencall.a \
++	-cclib $(XEN_ROOT)/tools/libs/foreignmemory/libxenforeignmemory.a \
++	-cclib $(XEN_ROOT)/tools/libs/devicemodel/libxendevicemodel.a \
++	-cclib $(XEN_ROOT)/tools/libs/toolcore/libxentoolcore.a \
++	-cclib $(XEN_ROOT)/tools/libs/toollog/libxentoollog.a
+ 
+ PROGRAMS = oxenstored
+ 
