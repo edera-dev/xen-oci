@@ -3,7 +3,7 @@ ARG XEN_VERSION=4.18.2
 WORKDIR /usr/src
 
 # build dependencies
-RUN apk update && apk add build-base git flex bison
+RUN apk update && apk add build-base git flex bison python3
 
 # check out xen sources
 ENV XEN_VERSION=${XEN_VERSION}
