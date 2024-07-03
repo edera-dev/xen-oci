@@ -34,5 +34,5 @@ RUN make -j$(nproc) -C tools/ocaml all nosharedlibs=y && strip tools/ocaml/xenst
 
 ## copy final oxenstored into a scratch image
 FROM scratch AS final
-COPY --from=build /usr/src/xen/tools/ocaml/xenstored/oxenstored /usr/sbin
+COPY --from=build /usr/src/xen/tools/ocaml/xenstored/oxenstored /usr/sbin/oxenstored
 COPY --from=build /usr/src/xen/tools/ocaml/xenstored/oxenstored.conf /etc/xen/oxenstored.conf
