@@ -1,0 +1,12 @@
+[Unit]
+Description=OCaml-based Xenstore
+
+[Service]
+Restart=on-failure
+Type=forking
+PreStart=/bin/mkdir -p /var/log/xen
+ExecStart=/usr/sbin/oxenstored
+User=root
+
+[Install]
+WantedBy=multi-user.target
