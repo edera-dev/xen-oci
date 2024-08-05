@@ -3,7 +3,7 @@ ARG XEN_VERSION=4.18.2
 WORKDIR /usr/src
 
 # build dependencies
-RUN apk update && apk add build-base git flex bison python3
+RUN apk update && apk add build-base git flex bison python3 gnu-efi
 
 # check out xen sources
 ENV XEN_VERSION=${XEN_VERSION}
@@ -18,3 +18,4 @@ RUN make install-xen
 # copy final Xen hypervisor into a scratch image
 FROM scratch AS final
 COPY --from=build /boot /boot
+COPY --from=build /usr/lib64/efi/* /boot
