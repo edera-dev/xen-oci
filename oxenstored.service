@@ -3,10 +3,9 @@ Description=OCaml-based Xenstore
 
 [Service]
 Restart=on-failure
-Type=forking
-PreStart=/bin/mkdir -p /var/log/xen
-PIDFile=/var/run/xen/xenstored.pid
-ExecStart=/usr/sbin/oxenstored
+Type=simple
+ExecStartPre=/bin/mkdir -p /var/log/xen
+ExecStart=/usr/sbin/oxenstored --no-fork
 User=root
 
 [Install]
