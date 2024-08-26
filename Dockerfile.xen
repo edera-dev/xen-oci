@@ -14,8 +14,8 @@ WORKDIR /usr/src/xen
 RUN ./configure --prefix=/usr --enable-xen --disable-tools --disable-stubdom --disable-docs
 RUN make xen -j$(nproc)
 RUN make install-xen
-RUN mkdir /xenboot; [ -f /boot/xen ] && cp /boot/xen /xenboot/xen; \
-  [ -f /boot/xen.gz ] && cp /boot/xen.gz /xenboot/xen.gz
+RUN mkdir /xenboot; ([ -f /boot/xen ] && cp /boot/xen /xenboot/xen) || \
+  ([ -f /boot/xen.gz ] && cp /boot/xen.gz /xenboot/xen.gz)
 
 # copy final Xen hypervisor into a scratch image
 FROM scratch AS final
