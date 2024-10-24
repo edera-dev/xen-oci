@@ -23,3 +23,4 @@ RUN mkdir /xenboot; ([ -f /boot/xen ] && cp /boot/xen /xenboot/xen) || \
 FROM scratch AS final
 COPY --from=build /xenboot/* /boot/
 COPY --from=build /usr/lib64/efi/xen.efi /usr/share/efi/xen.efi
+COPY --from=build /usr/src/xen/xen/.config /boot/xen.config
