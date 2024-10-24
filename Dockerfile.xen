@@ -12,6 +12,8 @@ WORKDIR /usr/src/xen
 
 # build Xen hypervisor
 RUN ./configure --prefix=/usr --enable-xen --disable-tools --disable-stubdom --disable-docs
+COPY configs/xen-x86_64.config ./xen/.config
+RUN make -C xen olddefconfig
 RUN make xen -j$(nproc)
 RUN make install-xen
 RUN mkdir /xenboot; ([ -f /boot/xen ] && cp /boot/xen /xenboot/xen) || \
