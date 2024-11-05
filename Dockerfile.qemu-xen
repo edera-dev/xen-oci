@@ -1,0 +1,97 @@
+FROM alpine:latest AS build
+ARG XEN_VERSION=4.19.0
+WORKDIR /usr/src
+
+# build dependencies
+RUN apk update && apk add build-base git flex bison perl bash coreutils argp-standalone attr-dev curl-dev linux-headers openssl-dev python3-dev xz-dev ocaml ocamlbuild ocaml-ocamldoc dev86 iasl util-linux-dev py3-setuptools ncurses-dev spice-dev xz-dev yajl-dev zlib-dev zstd-dev perl-dev openssl-dev e2fsprogs-dev curl-dev attr-dev dtc-dev meson samurai patchelf
+
+# check out xen sources
+ENV XEN_VERSION=${XEN_VERSION}
+RUN git clone https://github.com/xen-project/xen && cd xen && git checkout RELEASE-$XEN_VERSION
+WORKDIR /usr/src/xen
+COPY ./patches-oxenstored ./patches-oxenstored
+
+# configure Xen build system
+RUN ./configure --prefix=/usr --disable-xen --enable-tools --disable-stubdom --disable-docs
+
+# patch build system
+RUN for patch in patches-oxenstored/*.patch; do patch -p1 < $patch; done
+
+# build oxenstore
+RUN make -C tools/include all V=1 nosharedlibs=y
+RUN make -C tools/libs/call all V=1 nosharedlibs=y
+RUN make -C tools/libs/ctrl all V=1 nosharedlibs=y
+RUN make -C tools/libs/devicemodel all V=1 nosharedlibs=y
+RUN make -C tools/libs/foreignmemory all V=1 nosharedlibs=y
+RUN make -C tools/libs/gnttab all V=1 nosharedlibs=y
+RUN make -C tools/libs/guest all V=1 nosharedlibs=y
+RUN make -C tools/libs/evtchn all V=1 nosharedlibs=y
+RUN make -C tools/libs/toolcore all V=1 nosharedlibs=y
+RUN make -C tools/libs/toollog all V=1 nosharedlibs=y
+RUN make -C tools/libs/store all V=1 nosharedlibs=y
+
+WORKDIR /usr/src
+RUN git clone https://xenbits.xen.org/git-http/qemu-xen.git
+
+WORKDIR /usr/src/qemu-xen
+RUN env PKG_CONFIG_PATH="/usr/src/xen/tools/pkg-config:/usr/lib/pkg-config:/usr/share/pkg-config" \
+    ./configure --prefix=/usr --enable-xen --target-list=i386-softmmu \
+       --extra-cflags="-I/usr/src/xen/tools/include -I/usr/src/xen/tools/libxc -I/usr/src/xen/tools/xenstore" \
+       --extra-ldflags="-L/usr/src/xen/tools/libs/call -L/usr/src/xen/tools/libs/store -L/usr/src/xen/tools/libs/toollog -lxencall -lxenstore -lxentoollog" && \
+    make -j$(nproc)
+RUN make install DESTDIR="/usr/src/qemu-xen/output"
+
+RUN for PROG in elf2dmp qemu-edid qemu-ga qemu-img qemu-io qemu-nbd qemu-pr-helper qemu-storage-daemon qemu-system-i386 qemu-vmsr-helper; do \
+      patchelf --set-interpreter /opt/edera/lib/ld-musl-x86_64.so.1 --add-rpath /opt/edera/lib --add-rpath /opt/edera/usr/lib /usr/src/qemu-xen/output/usr/bin/$PROG; \
+    done
+
+FROM alpine:latest AS chroot
+RUN apk update && apk add --root /opt/edera --initdb && cp /etc/apk/repositories /opt/edera/etc/apk/repositories && cp -R /etc/apk/keys /opt/edera/etc/apk/keys && \
+    apk add --root /opt/edera \
+        so:libpixman-1.so.0 \
+        so:libz.so.1 \
+        so:libjpeg.so.8 \
+        so:libsasl2.so.3 \
+        so:libfdt.so.1 \
+        so:libgio-2.0.so.0 \
+        so:libgobject-2.0.so.0 \
+        so:libglib-2.0.so.0 \
+        so:libzstd.so.1 \
+        so:libncursesw.so.6 \
+        so:libgmodule-2.0.so.0 \
+        so:libspice-server.so.1 \
+        so:libcurl.so.4 \
+        so:libbz2.so.1 \
+        so:libmount.so.1 \
+        so:libintl.so.8 \
+        so:libffi.so.8 \
+        so:libpcre2-8.so.0 \
+        so:libssl.so.3 \
+        so:libcrypto.so.3 \
+        so:libopus.so.0 \
+        so:libgstreamer-1.0.so.0 \
+        so:libgstapp-1.0.so.0 \
+        so:liborc-0.4.so.0 \
+        so:liblz4.so.1 \
+        so:libstdc++.so.6 \
+        so:libcares.so.2 \
+        so:libnghttp2.so.14 \
+        so:libidn2.so.0 \
+        so:libpsl.so.5 \
+        so:libbrotlidec.so.1 \
+        so:libblkid.so.1 \
+        so:libgstbase-1.0.so.0 \
+        so:libgcc_s.so.1 \
+        so:libunistring.so.5 \
+        so:libbrotlicommon.so.1 \
+        so:libeconf.so.0
+
+RUN printf "/opt/edera/lib\n/opt/edera/usr/lib\n" > /opt/edera/etc/ld-musl-x86_64.path
+
+FROM scratch AS final
+COPY --from=chroot /opt/edera /opt/edera
+COPY --from=build /usr/src/qemu-xen/output /
+
+#FROM debian AS test
+#COPY --from=final / /
+#RUN qemu-system-i386 --version
