@@ -12,7 +12,7 @@ WORKDIR /usr/src/xen
 COPY ./patches-oxenstored ./patches-oxenstored
 
 # configure Xen build system
-RUN ./configure --prefix=/usr --disable-xen --enable-tools --disable-stubdom --disable-docs
+RUN ./configure --prefix=/opt/edera/qemu-xen --disable-xen --enable-tools --disable-stubdom --disable-docs
 
 # patch build system
 RUN for patch in patches-oxenstored/*.patch; do patch -p1 < $patch; done
@@ -38,8 +38,10 @@ COPY ./build-qemu.sh .
 RUN sh build-qemu.sh
 
 FROM alpine:latest AS chroot
-RUN apk update && apk add --root /opt/edera --initdb && cp /etc/apk/repositories /opt/edera/etc/apk/repositories && cp -R /etc/apk/keys /opt/edera/etc/apk/keys && \
-    apk add --root /opt/edera \
+RUN mkdir -p /opt/edera/sysroot && apk update && apk add --root /opt/edera/sysroot --initdb && \
+    cp /etc/apk/repositories /opt/edera/sysroot/etc/apk/repositories && \
+    cp -R /etc/apk/keys /opt/edera/sysroot/etc/apk/keys && \
+    apk add --root /opt/edera/sysroot \
         so:libpixman-1.so.0 \
         so:libz.so.1 \
         so:libjpeg.so.8 \
@@ -78,11 +80,11 @@ RUN apk update && apk add --root /opt/edera --initdb && cp /etc/apk/repositories
         so:libbrotlicommon.so.1 \
         so:libeconf.so.0
 
-RUN printf "/opt/edera/lib\n/opt/edera/usr/lib\n" > /opt/edera/etc/ld-musl-$(apk --print-arch).path
+RUN printf "/opt/edera/sysroot/lib\n/opt/edera/sysroot/usr/lib\n" > /opt/edera/sysroot/etc/ld-musl-$(apk --print-arch).path
 
 FROM scratch AS final
-COPY --from=chroot /opt/edera /opt/edera
-COPY --from=build /usr/src/qemu-xen/output /
+COPY --from=chroot /opt/edera/sysroot /opt/edera/sysroot
+COPY --from=build /usr/src/qemu-xen/output/opt/edera/qemu-xen /opt/edera/qemu-xen
 
 #FROM debian AS test
 #COPY --from=final / /
