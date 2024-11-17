@@ -1,4 +1,4 @@
-name: release
+name: nightly
 on:
   workflow_dispatch:
   schedule:
@@ -13,14 +13,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        release:
-        - 4.18.2
-        - 4.18.3
-        - 4.19.0
         component:
         - xen
         - oxenstored
-    name: oci build ${{ matrix.component }}-${{ matrix.release }}
+        - qemu-xen
+    name: oci build ${{ matrix.component }}
     steps:
     - uses: step-security/harden-runner@17d0e2bd7d51742c71671bd19fa12bdc9d40a3d6 # v2.8.1
       with:
@@ -41,12 +38,11 @@ jobs:
       with:
         file: ./Dockerfile.${{ matrix.component }}
         platforms: linux/amd64,linux/aarch64
-        tags: ghcr.io/edera-dev/${{ matrix.component }}:${{ matrix.release }}
-        build-args: XEN_VERSION=${{ matrix.release }}
+        tags: ghcr.io/edera-dev/${{ matrix.component }}:nightly
         push: true
     - name: Sign the image
       env:
         DIGEST: ${{ steps.push-step.outputs.digest }}
-        TAGS: ghcr.io/edera-dev/${{ matrix.component }}:${{ matrix.release }}
+        TAGS: ghcr.io/edera-dev/${{ matrix.component }}:nightly
         COSIGN_EXPERIMENTAL: "true"
       run: cosign sign --yes "${TAGS}@${DIGEST}"
