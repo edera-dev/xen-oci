@@ -12,7 +12,7 @@ make install DESTDIR="/usr/src/qemu-xen/output"
 
 for PROG in elf2dmp qemu-edid qemu-ga qemu-img qemu-io qemu-nbd qemu-pr-helper qemu-storage-daemon qemu-system-${target} qemu-vmsr-helper; do
   echo "Setting interpreter for $PROG"
-  [ -x "/usr/src/qemu-xen/output/opt/edera/qemu-xen/bin/$PROG" ] && patchelf --set-interpreter /opt/edera/sysroot/lib/ld-musl-$(apk --print-arch).so.1 --add-rpath /opt/edera/sysroot/lib --add-rpath /opt/edera/sysroot/usr/lib "/usr/src/qemu-xen/output/opt/edera/qemu-xen/bin/$PROG";
+  [ -x "/usr/src/qemu-xen/output/opt/edera/qemu-xen/bin/$PROG" ] && patchelf --set-interpreter "/opt/edera/qemu-xen/sysroot/lib/ld-musl-$(apk --print-arch).so.1" --add-rpath "/opt/edera/qemu-xen/sysroot/lib" --add-rpath "/opt/edera/qemu-xen/sysroot/usr/lib" "/usr/src/qemu-xen/output/opt/edera/qemu-xen/bin/$PROG";
 done
 
 echo "Build complete"

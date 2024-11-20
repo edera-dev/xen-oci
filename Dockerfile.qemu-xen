@@ -17,18 +17,18 @@ RUN ./configure --prefix=/opt/edera/qemu-xen --disable-xen --enable-tools --disa
 # patch build system
 RUN for patch in patches-oxenstored/*.patch; do patch -p1 < $patch; done
 
-# build oxenstore
-RUN make -C tools/include all V=1 nosharedlibs=y
-RUN make -C tools/libs/call all V=1 nosharedlibs=y
-RUN make -C tools/libs/ctrl all V=1 nosharedlibs=y
-RUN make -C tools/libs/devicemodel all V=1 nosharedlibs=y
-RUN make -C tools/libs/foreignmemory all V=1 nosharedlibs=y
-RUN make -C tools/libs/gnttab all V=1 nosharedlibs=y
-RUN make -C tools/libs/guest all V=1 nosharedlibs=y
-RUN make -C tools/libs/evtchn all V=1 nosharedlibs=y
-RUN make -C tools/libs/toolcore all V=1 nosharedlibs=y
-RUN make -C tools/libs/toollog all V=1 nosharedlibs=y
-RUN make -C tools/libs/store all V=1 nosharedlibs=y
+# build libraries
+RUN CFLAGS="-O2 -Wall -static -DUSE_PTHREAD" make -C tools/include all V=1 nosharedlibs=y
+RUN CFLAGS="-O2 -Wall -static -DUSE_PTHREAD" make -C tools/libs/call all V=1 nosharedlibs=y
+RUN CFLAGS="-O2 -Wall -static -DUSE_PTHREAD" make -C tools/libs/ctrl all V=1 nosharedlibs=y
+RUN CFLAGS="-O2 -Wall -static -DUSE_PTHREAD" make -C tools/libs/devicemodel all V=1 nosharedlibs=y
+RUN CFLAGS="-O2 -Wall -static -DUSE_PTHREAD" make -C tools/libs/foreignmemory all V=1 nosharedlibs=y
+RUN CFLAGS="-O2 -Wall -static -DUSE_PTHREAD" make -C tools/libs/gnttab all V=1 nosharedlibs=y
+RUN CFLAGS="-O2 -Wall -static -DUSE_PTHREAD" make -C tools/libs/guest all V=1 nosharedlibs=y
+RUN CFLAGS="-O2 -Wall -static -DUSE_PTHREAD" make -C tools/libs/evtchn all V=1 nosharedlibs=y
+RUN CFLAGS="-O2 -Wall -static -DUSE_PTHREAD" make -C tools/libs/toolcore all V=1 nosharedlibs=y
+RUN CFLAGS="-O2 -Wall -static -DUSE_PTHREAD" make -C tools/libs/toollog all V=1 nosharedlibs=y
+RUN CFLAGS="-O2 -Wall -static -DUSE_PTHREAD" make -C tools/libs/store all V=1 nosharedlibs=y
 
 WORKDIR /usr/src
 RUN git clone https://xenbits.xen.org/git-http/qemu-xen.git
@@ -38,10 +38,10 @@ COPY ./build-qemu.sh .
 RUN sh build-qemu.sh
 
 FROM alpine:latest AS chroot
-RUN mkdir -p /opt/edera/sysroot && apk update && apk add --root /opt/edera/sysroot --initdb && \
-    cp /etc/apk/repositories /opt/edera/sysroot/etc/apk/repositories && \
-    cp -R /etc/apk/keys /opt/edera/sysroot/etc/apk/keys && \
-    apk add --root /opt/edera/sysroot \
+RUN mkdir -p /opt/edera/qemu-xen/sysroot && apk update && apk add --root /opt/edera/qemu-xen/sysroot --initdb && \
+    cp /etc/apk/repositories /opt/edera/qemu-xen/sysroot/etc/apk/repositories && \
+    cp -R /etc/apk/keys /opt/edera/qemu-xen/sysroot/etc/apk/keys && \
+    apk add --root /opt/edera/qemu-xen/sysroot \
         so:libpixman-1.so.0 \
         so:libz.so.1 \
         so:libjpeg.so.8 \
@@ -79,13 +79,8 @@ RUN mkdir -p /opt/edera/sysroot && apk update && apk add --root /opt/edera/sysro
         so:libunistring.so.5 \
         so:libbrotlicommon.so.1 \
         so:libeconf.so.0
-
-RUN printf "/opt/edera/sysroot/lib\n/opt/edera/sysroot/usr/lib\n" > /opt/edera/sysroot/etc/ld-musl-$(apk --print-arch).path
+RUN printf "/opt/edera/qemu-xen/sysroot/lib\n/opt/edera/qemu-xen/sysroot/usr/lib\n" > /opt/edera/qemu-xen/sysroot/etc/ld-musl-$(apk --print-arch).path
 
 FROM scratch AS final
-COPY --from=chroot /opt/edera/sysroot /opt/edera/sysroot
 COPY --from=build /usr/src/qemu-xen/output/opt/edera/qemu-xen /opt/edera/qemu-xen
-
-#FROM debian AS test
-#COPY --from=final / /
-#RUN qemu-system-i386 --version
+COPY --from=chroot /opt/edera/qemu-xen/sysroot /opt/edera/qemu-xen/sysroot
