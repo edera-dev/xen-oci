@@ -34,6 +34,9 @@ WORKDIR /usr/src
 RUN git clone https://xenbits.xen.org/git-http/qemu-xen.git
 
 WORKDIR /usr/src/qemu-xen
+COPY ./patches-qemu-xen ./patches-qemu-xen
+RUN for patch in patches-qemu-xen/*.patch; do patch -p1 < $patch; done
+
 COPY ./build-qemu.sh .
 RUN sh build-qemu.sh
 
