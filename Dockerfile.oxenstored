@@ -31,9 +31,11 @@ RUN make -C tools/libs/evtchn all V=1 nosharedlibs=y
 RUN make -C tools/libs/toolcore all V=1 nosharedlibs=y
 RUN make -C tools/libs/toollog all V=1 nosharedlibs=y
 RUN make -j$(nproc) -C tools/ocaml all nosharedlibs=y && strip tools/ocaml/xenstored/oxenstored
+COPY ./oxenstored.service /output/usr/lib/systemd/system/oxenstored.service
+RUN ln -s oxenstored.service /output/usr/lib/systemd/system/xenstored.service
 
 ## copy final oxenstored into a scratch image
 FROM scratch AS final
 COPY --from=build /usr/src/xen/tools/ocaml/xenstored/oxenstored /usr/sbin/oxenstored
 COPY --from=build /usr/src/xen/tools/ocaml/xenstored/oxenstored.conf /etc/xen/oxenstored.conf
-COPY ./oxenstored.service /usr/lib/systemd/system/oxenstored.service
+COPY --from=build /output/usr/lib/systemd/system /usr/lib/systemd/system
