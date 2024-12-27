@@ -1,5 +1,5 @@
-FROM alpine:latest AS build
-ARG XEN_VERSION=4.19.0
+FROM alpine:3.21@sha256:21dc6063fd678b478f57c0e13f47560d0ea4eeba26dfc947b2a4f81f686b9f45 AS build
+ARG XEN_VERSION=4.19.1
 WORKDIR /usr/src
 
 # build dependencies
@@ -7,7 +7,7 @@ RUN apk update && apk add build-base git flex bison perl bash coreutils argp-sta
 
 # check out xen sources
 ENV XEN_VERSION=${XEN_VERSION}
-RUN git clone https://github.com/xen-project/xen && cd xen && git checkout RELEASE-$XEN_VERSION
+RUN git clone -b "RELEASE-$XEN_VERSION" https://github.com/xen-project/xen.git && cd xen
 WORKDIR /usr/src/xen
 COPY ./patches-oxenstored ./patches-oxenstored
 
@@ -31,16 +31,13 @@ RUN CFLAGS="-O2 -Wall -static -DUSE_PTHREAD" make -C tools/libs/toollog all V=1 
 RUN CFLAGS="-O2 -Wall -static -DUSE_PTHREAD" make -C tools/libs/store all V=1 nosharedlibs=y
 
 WORKDIR /usr/src
-RUN git clone https://xenbits.xen.org/git-http/qemu-xen.git
+RUN git clone -b edera https://github.com/edera-dev/qemu.git qemu-xen
 
 WORKDIR /usr/src/qemu-xen
-COPY ./patches-qemu-xen ./patches-qemu-xen
-RUN for patch in patches-qemu-xen/*.patch; do patch -p1 < $patch; done
-
 COPY ./build-qemu.sh .
 RUN sh build-qemu.sh
 
-FROM alpine:latest AS chroot
+FROM alpine:3.21@sha256:21dc6063fd678b478f57c0e13f47560d0ea4eeba26dfc947b2a4f81f686b9f45 AS chroot
 RUN mkdir -p /opt/edera/qemu-xen/sysroot && apk update && apk add --root /opt/edera/qemu-xen/sysroot --initdb && \
     cp /etc/apk/repositories /opt/edera/qemu-xen/sysroot/etc/apk/repositories && \
     cp -R /etc/apk/keys /opt/edera/qemu-xen/sysroot/etc/apk/keys && \
