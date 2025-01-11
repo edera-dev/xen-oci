@@ -1,4 +1,4 @@
-FROM alpine:3.21@sha256:b97e2a89d0b9e4011bb88c02ddf01c544b8c781acf1f4d559e7c8f12f1047ac3 AS build
+FROM alpine:3.21@sha256:56fa17d2a7e7f168a043a2712e63aed1f8543aeafdcee47c58dcffe38ed51099 AS build
 ARG XEN_VERSION=4.19.1
 WORKDIR /usr/src
 
@@ -18,18 +18,18 @@ RUN ./configure --prefix=/usr --disable-xen --enable-tools --disable-stubdom --d
 RUN for patch in patches-oxenstored/*.patch; do patch -p1 < $patch; done
 
 # build oxenstore
-ENV CFLAGS="-O2 -Wall -static"
+ENV CFLAGS="-O2 -Wall -static -fPIC"
 ENV LDFLAGS="-static"
-RUN make -C tools/include all V=1 nosharedlibs=y
-RUN make -C tools/libs/call all V=1 nosharedlibs=y
-RUN make -C tools/libs/ctrl all V=1 nosharedlibs=y
-RUN make -C tools/libs/devicemodel all V=1 nosharedlibs=y
-RUN make -C tools/libs/foreignmemory all V=1 nosharedlibs=y
-RUN make -C tools/libs/gnttab all V=1 nosharedlibs=y
-RUN make -C tools/libs/guest all V=1 nosharedlibs=y
-RUN make -C tools/libs/evtchn all V=1 nosharedlibs=y
-RUN make -C tools/libs/toolcore all V=1 nosharedlibs=y
-RUN make -C tools/libs/toollog all V=1 nosharedlibs=y
+RUN make -j$(nproc) -C tools/include all V=1 nosharedlibs=y
+RUN make -j$(nproc) -C tools/libs/call all V=1 nosharedlibs=y
+RUN make -j$(nproc) -C tools/libs/ctrl all V=1 nosharedlibs=y
+RUN make -j$(nproc) -C tools/libs/devicemodel all V=1 nosharedlibs=y
+RUN make -j$(nproc) -C tools/libs/foreignmemory all V=1 nosharedlibs=y
+RUN make -j$(nproc) -C tools/libs/gnttab all V=1 nosharedlibs=y
+RUN make -j$(nproc) -C tools/libs/guest all V=1 nosharedlibs=y
+RUN make -j$(nproc) -C tools/libs/evtchn all V=1 nosharedlibs=y
+RUN make -j$(nproc) -C tools/libs/toolcore all V=1 nosharedlibs=y
+RUN make -j$(nproc) -C tools/libs/toollog all V=1 nosharedlibs=y
 RUN make -j$(nproc) -C tools/ocaml all nosharedlibs=y && strip tools/ocaml/xenstored/oxenstored
 COPY ./oxenstored.service /output/usr/lib/systemd/system/oxenstored.service
 RUN ln -s oxenstored.service /output/usr/lib/systemd/system/xenstored.service

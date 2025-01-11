@@ -15,4 +15,3 @@ index e8aaecf2e6..3be043f947 100644
 +	-cclib $(XEN_ROOT)/tools/libs/toollog/libxentoollog.a
  
  PROGRAMS = oxenstored
- 
