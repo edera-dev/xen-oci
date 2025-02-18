@@ -1,4 +1,4 @@
-FROM alpine:3.21@sha256:56fa17d2a7e7f168a043a2712e63aed1f8543aeafdcee47c58dcffe38ed51099 AS build
+FROM alpine:3.21@sha256:a8560b36e8b8210634f77d9f7f9efd7ffa463e380b75e2e74aff4511df3ef88c AS build
 ARG XEN_VERSION=4.19.1
 WORKDIR /usr/src
 
@@ -37,7 +37,7 @@ WORKDIR /usr/src/qemu-xen
 COPY ./build-qemu.sh .
 RUN sh build-qemu.sh
 
-FROM alpine:3.21@sha256:56fa17d2a7e7f168a043a2712e63aed1f8543aeafdcee47c58dcffe38ed51099 AS chroot
+FROM alpine:3.21@sha256:a8560b36e8b8210634f77d9f7f9efd7ffa463e380b75e2e74aff4511df3ef88c AS chroot
 RUN mkdir -p /opt/edera/qemu-xen/sysroot && apk update && apk add --root /opt/edera/qemu-xen/sysroot --initdb && \
     cp /etc/apk/repositories /opt/edera/qemu-xen/sysroot/etc/apk/repositories && \
     cp -R /etc/apk/keys /opt/edera/qemu-xen/sysroot/etc/apk/keys && \
