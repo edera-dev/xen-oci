@@ -10,6 +10,10 @@ ENV XEN_VERSION=${XEN_VERSION}
 RUN git clone -b "RELEASE-$XEN_VERSION" https://github.com/xen-project/xen.git && cd xen
 WORKDIR /usr/src/xen
 
+# patch xen
+COPY ./patches-xen ./patches-xen
+RUN for patch in patches-xen/*.patch; do patch -p1 < $patch; done
+
 # get rid of -Werror
 RUN find . \( -name '*.mk' -o -name 'Make*' \) -exec sed -i -e 's/-Werror//g' {} +
 
