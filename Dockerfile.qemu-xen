@@ -1,6 +1,8 @@
 FROM alpine:3.21@sha256:a8560b36e8b8210634f77d9f7f9efd7ffa463e380b75e2e74aff4511df3ef88c AS build
 ARG XEN_VERSION=4.19.1
 WORKDIR /usr/src
+COPY ./apply-patches.sh ./apply-patches.sh
+COPY ./patches ./patches
 
 # build dependencies
 RUN apk update && apk add build-base git flex bison perl bash coreutils argp-standalone attr-dev curl-dev linux-headers openssl-dev python3-dev xz-dev ocaml ocamlbuild ocaml-ocamldoc dev86 iasl util-linux-dev py3-setuptools ncurses-dev spice-dev xz-dev yajl-dev zlib-dev zstd-dev perl-dev openssl-dev e2fsprogs-dev curl-dev attr-dev dtc-dev meson samurai patchelf
@@ -9,13 +11,9 @@ RUN apk update && apk add build-base git flex bison perl bash coreutils argp-sta
 ENV XEN_VERSION=${XEN_VERSION}
 RUN git clone -b "RELEASE-$XEN_VERSION" https://github.com/xen-project/xen.git && cd xen
 WORKDIR /usr/src/xen
-COPY ./patches-oxenstored ./patches-oxenstored
 
 # configure Xen build system
 RUN ./configure --prefix=/opt/edera/qemu-xen --disable-xen --enable-tools --disable-stubdom --disable-docs
-
-# patch build system
-RUN for patch in patches-oxenstored/*.patch; do patch -p1 < $patch; done
 
 # build libraries
 RUN CFLAGS="-O2 -Wall -static -DUSE_PTHREAD" make -j$(nproc) -C tools/include all V=1 nosharedlibs=y
@@ -36,8 +34,7 @@ RUN git clone -b edera https://github.com/edera-dev/qemu.git qemu-xen
 WORKDIR /usr/src/qemu-xen
 
 # patch qemu
-COPY ./patches-qemu ./patches-qemu
-RUN for patch in patches-qemu/*.patch; do patch -p1 < $patch; done
+RUN sh /usr/src/apply-patches.sh ${XEN_VERSION} qemu
 
 COPY ./build-qemu.sh .
 RUN sh build-qemu.sh

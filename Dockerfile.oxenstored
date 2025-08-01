@@ -5,17 +5,20 @@ WORKDIR /usr/src
 # build dependencies
 RUN apk update && apk add build-base git flex bison perl bash coreutils argp-standalone attr-dev curl-dev linux-headers openssl-dev python3-dev xz-dev ocaml ocamlbuild ocaml-ocamldoc dev86 iasl util-linux-dev py3-setuptools ncurses-dev spice-dev xz-dev yajl-dev zlib-dev zstd-dev perl-dev openssl-dev e2fsprogs-dev curl-dev attr-dev dtc-dev
 
+# patch management infrastructure
+COPY ./apply-patches.sh ./apply-patches.sh
+COPY ./patches ./patches
+
 # check out xen sources
 ENV XEN_VERSION=${XEN_VERSION}
 RUN git clone -b "RELEASE-$XEN_VERSION" https://github.com/xen-project/xen.git && cd xen
 WORKDIR /usr/src/xen
-COPY ./patches-oxenstored ./patches-oxenstored
+
+# patch build system
+RUN sh /usr/src/apply-patches.sh ${XEN_VERSION} oxenstored
 
 # configure Xen build system
 RUN ./configure --prefix=/usr --disable-xen --enable-tools --disable-stubdom --disable-docs
-
-# patch build system
-RUN for patch in patches-oxenstored/*.patch; do patch -p1 < $patch; done
 
 # build oxenstore
 ENV CFLAGS="-O2 -Wall -static -fPIC"
