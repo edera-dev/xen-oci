@@ -39,6 +39,7 @@ jobs:
         file: ./Dockerfile.${{ matrix.component }}
         platforms: linux/amd64,linux/aarch64
         tags: ghcr.io/edera-dev/${{ matrix.component }}:nightly
+        build-args: XEN_BRANCH=wip/vpci-pvh
         push: true
     - name: Sign the image
       env:
