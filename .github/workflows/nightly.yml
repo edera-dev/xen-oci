@@ -39,7 +39,7 @@ jobs:
         file: ./Dockerfile.${{ matrix.component }}
         platforms: linux/amd64,linux/aarch64
         tags: ghcr.io/edera-dev/${{ matrix.component }}:nightly
-        build-args: XEN_BRANCH=wip/vpci-pvh-sriov-v2
+        build-args: XEN_BRANCH=wip/vpci-pvh-sriov-v3
         push: true
     - name: Sign the image
       env:
