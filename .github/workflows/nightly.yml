@@ -39,7 +39,8 @@ jobs:
         file: ./Dockerfile.${{ matrix.component }}
         platforms: linux/amd64,linux/aarch64
         tags: ghcr.io/edera-dev/${{ matrix.component }}:nightly
-        build-args: XEN_BRANCH=edera/4.21
+        build-args:
+          - XEN_VERSION=4.21
         push: true
     - name: Sign the image
       env:
