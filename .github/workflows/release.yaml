@@ -9,7 +9,7 @@ permissions:
   id-token: write
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: edera-large
     strategy:
       fail-fast: false
       matrix:
