@@ -15,7 +15,9 @@ COPY ./patches ./patches
 ENV XEN_VERSION=${XEN_VERSION}
 ENV XEN_BRANCH=${XEN_BRANCH}
 ENV XEN_REPO=${XEN_REPO}
-RUN git clone -b "$XEN_BRANCH" $XEN_REPO && cd xen
+RUN git clone -b "$XEN_BRANCH" $XEN_REPO
+
+WORKDIR /usr/src/xen
 
 # patch build system
 RUN sh /usr/src/apply-patches.sh ${XEN_VERSION} oxenstored
