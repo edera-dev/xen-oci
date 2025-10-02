@@ -18,6 +18,7 @@ jobs:
         - 4.19.1
         - 4.20.0
         - 4.20.1
+        - 4.21
         component:
         - xen
         - oxenstored
@@ -38,13 +39,29 @@ jobs:
         registry: ghcr.io
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
+
+      # these are all built against upstream RELEASE-X.X.X branches, and patch them.
+      # Starting with 4.21, we build against `edera/X.X.X` branches, which integrated patches.
+    - name: Determine XEN_BRANCH
+      id: branch
+      run: |
+        VERSION="${{ matrix.release }}"
+        MAJOR_MINOR=$(echo $VERSION | cut -d. -f1,2)
+
+        if (( $(echo "$MAJOR_MINOR <= 4.20" | bc -l) )); then
+          echo "name=RELEASE-${VERSION}" >> $GITHUB_OUTPUT
+        else
+          echo "name=edera/${VERSION}" >> $GITHUB_OUTPUT
+        fi
     - uses: docker/build-push-action@471d1dc4e07e5cdedd4c2171150001c434f0b7a4 # v6.15.0
       id: push-step
       with:
         file: ./Dockerfile.${{ matrix.component }}
         platforms: linux/amd64,linux/aarch64
         tags: ghcr.io/edera-dev/${{ matrix.component }}:${{ matrix.release }}
-        build-args: XEN_VERSION=${{ matrix.release }}
+        build-args: |
+          XEN_VERSION=${{ matrix.release }}
+          XEN_BRANCH=${{ steps.branch.outputs.name }}
         push: true
     - name: Sign the image
       env:
