@@ -1,0 +1,212 @@
+diff --git a/fsdev/qemu-fsdev.c b/fsdev/qemu-fsdev.c
+index f5c953a710..8b82e3c26d 100644
+--- a/fsdev/qemu-fsdev.c
++++ b/fsdev/qemu-fsdev.c
+@@ -160,6 +160,13 @@ int qemu_fsdev_add(QemuOpts *opts, Error **errp)
+         return -1;
+     }
+ 
++    QTAILQ_FOREACH(fsle, &fsdriver_entries, next) {
++        if (strcmp(fsle->fse.fsdev_id, fsdev_id) == 0) {
++          error_setg(errp, "fsdev: '%s' already exists", fsdev_id);
++          return -1;
++        }
++    }
++
+     fsle = g_malloc0(sizeof(*fsle));
+     fsle->fse.fsdev_id = g_strdup(fsdev_id);
+     fsle->fse.ops = FsDrivers[i].ops;
+@@ -199,3 +206,26 @@ FsDriverEntry *get_fsdev_fsentry(char *id)
+     }
+     return NULL;
+ }
++
++void qemu_fsdev_del(const char *id)
++{
++    struct FsDriverListEntry *fsle;
++
++    if (!id) {
++        return;
++    }
++
++    QTAILQ_FOREACH(fsle, &fsdriver_entries, next) {
++        if (strcmp(fsle->fse.fsdev_id, id) == 0) {
++            QTAILQ_REMOVE(&fsdriver_entries, fsle, next);
++
++            g_free(fsle->fse.fsdev_id);
++            g_free(fsle->fse.path);
++
++            fsdev_throttle_cleanup(&fsle->fse.fst);
++
++            g_free(fsle);
++            return;
++        }
++    }
++}
+diff --git a/fsdev/qemu-fsdev.h b/fsdev/qemu-fsdev.h
+index 52a5397770..8fba188984 100644
+--- a/fsdev/qemu-fsdev.h
++++ b/fsdev/qemu-fsdev.h
+@@ -15,6 +15,7 @@
+ #include "file-op-9p.h"
+ 
+ int qemu_fsdev_add(QemuOpts *opts, Error **errp);
++void qemu_fsdev_del(const char *id);
+ FsDriverEntry *get_fsdev_fsentry(char *id);
+ extern FileOperations local_ops;
+ extern FileOperations synth_ops;
+diff --git a/hw/9pfs/xen-9p-backend.c b/hw/9pfs/xen-9p-backend.c
+index 1d63dbe486..e5ec8265d1 100644
+--- a/hw/9pfs/xen-9p-backend.c
++++ b/hw/9pfs/xen-9p-backend.c
+@@ -340,33 +340,62 @@ static void xen_9pfs_disconnect(struct XenLegacyDevice *xendev)
+     Xen9pfsDev *xen_9pdev = container_of(xendev, Xen9pfsDev, xendev);
+     int i;
+ 
++    V9fsState *s = &xen_9pdev->state;
++
++    if (s->tag) {
++        v9fs_device_unrealize_common(s);
++        s->tag = NULL;
++    }
++
++    g_free(s->fsconf.tag);
++    s->fsconf.tag = NULL;
++
++    if (s->fsconf.fsdev_id) {
++        qemu_fsdev_del(s->fsconf.fsdev_id);
++        s->fsconf.fsdev_id = NULL;
++    }
++
+     trace_xen_9pfs_disconnect(xendev->name);
+ 
+-    for (i = 0; i < xen_9pdev->num_rings; i++) {
+-        if (xen_9pdev->rings[i].evtchndev != NULL) {
+-            qemu_set_fd_handler(qemu_xen_evtchn_fd(xen_9pdev->rings[i].evtchndev),
++    if (xen_9pdev->rings != NULL) {
++        for (i = 0; i < xen_9pdev->num_rings; i++) {
++            if (xen_9pdev->rings[i].evtchndev != NULL) {
++                qemu_set_fd_handler(qemu_xen_evtchn_fd(xen_9pdev->rings[i].evtchndev),
+                                 NULL, NULL, NULL);
+-            qemu_xen_evtchn_unbind(xen_9pdev->rings[i].evtchndev,
++                qemu_xen_evtchn_unbind(xen_9pdev->rings[i].evtchndev,
+                                    xen_9pdev->rings[i].local_port);
+-            xen_9pdev->rings[i].evtchndev = NULL;
+-        }
+-        if (xen_9pdev->rings[i].data != NULL) {
+-            xen_be_unmap_grant_refs(&xen_9pdev->xendev,
++                qemu_xen_evtchn_close(xen_9pdev->rings[i].evtchndev);
++                xen_9pdev->rings[i].evtchndev = NULL;
++            }
++        
++            if (xen_9pdev->rings[i].data != NULL) {
++                xen_be_unmap_grant_refs(&xen_9pdev->xendev,
+                                     xen_9pdev->rings[i].data,
+                                     xen_9pdev->rings[i].intf->ref,
+                                     (1 << xen_9pdev->rings[i].ring_order));
+-            xen_9pdev->rings[i].data = NULL;
+-        }
+-        if (xen_9pdev->rings[i].intf != NULL) {
+-            xen_be_unmap_grant_ref(&xen_9pdev->xendev,
++                xen_9pdev->rings[i].data = NULL;
++            }
++        
++            if (xen_9pdev->rings[i].intf != NULL) {
++                xen_be_unmap_grant_ref(&xen_9pdev->xendev,
+                                    xen_9pdev->rings[i].intf,
+                                    xen_9pdev->rings[i].ref);
+-            xen_9pdev->rings[i].intf = NULL;
+-        }
+-        if (xen_9pdev->rings[i].bh != NULL) {
+-            qemu_bh_delete(xen_9pdev->rings[i].bh);
+-            xen_9pdev->rings[i].bh = NULL;
++                xen_9pdev->rings[i].intf = NULL;
++            }
++
++            if (xen_9pdev->rings[i].bh != NULL) {
++                qemu_bh_delete(xen_9pdev->rings[i].bh);
++                xen_9pdev->rings[i].bh = NULL;
++            }
++
++            if (xen_9pdev->rings[i].sg != NULL) {
++                g_free(xen_9pdev->rings[i].sg);
++                xen_9pdev->rings[i].sg = NULL;
++            }
+         }
++
++        g_free(xen_9pdev->rings);
++        xen_9pdev->rings = NULL;
+     }
+ 
+     g_free(xen_9pdev->id);
+@@ -377,19 +406,11 @@ static void xen_9pfs_disconnect(struct XenLegacyDevice *xendev)
+     xen_9pdev->path = NULL;
+     g_free(xen_9pdev->security_model);
+     xen_9pdev->security_model = NULL;
+-    g_free(xen_9pdev->rings);
+-    xen_9pdev->rings = NULL;
+ }
+ 
+ static int xen_9pfs_free(struct XenLegacyDevice *xendev)
+ {
+-    // XXX: this is a hackfix that allows us to close the fsdev's rootfd
+-    // the rootfd is closed in the cleanup function...
+     Xen9pfsDev *xen_9pdev = container_of(xendev, Xen9pfsDev, xendev);
+-    V9fsState *s = &xen_9pdev->state;
+-
+-    if (s->ops != NULL && s->ops->cleanup != NULL)
+-        s->ops->cleanup(&s->ctx);
+ 
+     trace_xen_9pfs_free(xendev->name);
+ 
+@@ -404,6 +425,11 @@ static int xen_9pfs_connect(struct XenLegacyDevice *xendev)
+     V9fsState *s = &xen_9pdev->state;
+     QemuOpts *fsdev;
+ 
++    if (xen_9pdev->rings != NULL || xen_9pdev->id != NULL) {
++        xen_pv_printf(xendev, 1, "device reused, cleaning up old state\n");
++        xen_9pfs_disconnect(xendev);
++    }
++
+     trace_xen_9pfs_connect(xendev->name);
+ 
+     if (xenstore_read_fe_int(&xen_9pdev->xendev, "num-rings",
+@@ -491,11 +517,12 @@ static int xen_9pfs_connect(struct XenLegacyDevice *xendev)
+     xen_9pdev->security_model = xenstore_read_be_str(xendev, "security_model");
+     xen_9pdev->multidevs = xenstore_read_be_str(xendev, "multidevs");
+     xen_9pdev->path = xenstore_read_be_str(xendev, "path");
++    xen_9pdev->tag = xenstore_read_fe_str(xendev, "tag");
+     xen_9pdev->id = s->fsconf.fsdev_id =
+-        g_strdup_printf("xen9p%d", xendev->dev);
+-    xen_9pdev->tag = s->fsconf.tag = xenstore_read_fe_str(xendev, "tag");
++        g_strdup_printf("xen9p%d-%s", xendev->dev, xen_9pdev->tag);
++    s->fsconf.tag = g_strdup(xen_9pdev->tag);
+     fsdev = qemu_opts_create(qemu_find_opts("fsdev"),
+-            s->fsconf.tag,
++            s->fsconf.fsdev_id,
+             1, NULL);
+     qemu_opt_set(fsdev, "fsdriver", "local", NULL);
+     qemu_opt_set(fsdev, "path", xen_9pdev->path, NULL);
+@@ -503,16 +530,20 @@ static int xen_9pfs_connect(struct XenLegacyDevice *xendev)
+     if (xen_9pdev->multidevs) {
+         qemu_opt_set(fsdev, "multidevs", xen_9pdev->multidevs, NULL);
+     }
+-    qemu_opts_set_id(fsdev, strdup(s->fsconf.fsdev_id));
+     qemu_fsdev_add(fsdev, &err);
++    qemu_opts_del(fsdev);
+     if (err) {
+         error_report_err(err);
++        goto out;
+     }
+-    v9fs_device_realize_common(s, &xen_9p_transport, NULL);
+ 
++    if (v9fs_device_realize_common(s, &xen_9p_transport, NULL)) {
++        goto out;
++    }
+     return 0;
+ 
+ out:
++    xen_9pfs_disconnect(xendev);
+     xen_9pfs_free(xendev);
+     return -1;
+ }
