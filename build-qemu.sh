@@ -6,7 +6,9 @@ echo "Building for: $target"
 env PKG_CONFIG_PATH="/usr/src/xen/tools/pkg-config:/usr/lib/pkg-config:/usr/share/pkg-config" \
 ./configure --prefix=/opt/edera/qemu-xen --enable-xen --target-list=${target}-softmmu \
   --extra-cflags="-I/usr/src/xen/tools/include -I/usr/src/xen/tools/libxc -I/usr/src/xen/tools/xenstore" \
-  --extra-ldflags="-L/usr/src/xen/tools/libs/call -L/usr/src/xen/tools/libs/store -L/usr/src/xen/tools/libs/toollog -lxencall -lxenstore -lxentoollog"
+  --extra-ldflags="-L/usr/src/xen/tools/libs/call -L/usr/src/xen/tools/libs/store -L/usr/src/xen/tools/libs/toollog -lxencall -lxenstore -lxentoollog /usr/src/libucontext/libucontext.a" \
+  --with-coroutine=ucontext \
+  --enable-coroutine-pool
 make -j$(nproc)
 make install DESTDIR="/usr/src/qemu-xen/output"
 
