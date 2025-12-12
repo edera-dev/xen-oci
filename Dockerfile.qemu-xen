@@ -1,5 +1,5 @@
 FROM alpine:3.21@sha256:a8560b36e8b8210634f77d9f7f9efd7ffa463e380b75e2e74aff4511df3ef88c AS build
-ARG XEN_VERSION=4.19.1
+ARG XEN_VERSION=4.21
 ARG XEN_BRANCH=edera/$XEN_VERSION
 ARG XEN_REPO=https://github.com/edera-dev/xen.git
 WORKDIR /usr/src
@@ -32,6 +32,15 @@ RUN CFLAGS="-O2 -Wall -static -DUSE_PTHREAD" make -j$(nproc) -C tools/libs/evtch
 RUN CFLAGS="-O2 -Wall -static -DUSE_PTHREAD" make -j$(nproc) -C tools/libs/toolcore all V=1 nosharedlibs=y
 RUN CFLAGS="-O2 -Wall -static -DUSE_PTHREAD" make -j$(nproc) -C tools/libs/toollog all V=1 nosharedlibs=y
 RUN CFLAGS="-O2 -Wall -static -DUSE_PTHREAD" make -j$(nproc) -C tools/libs/store all V=1 nosharedlibs=y
+
+# build libucontext
+ARG LIBUCONTEXT_VERSION=1.5
+ENV LIBUCONTEXT_VERSION=${LIBUCONTEXT_VERSION}
+WORKDIR /usr/src
+RUN git clone -b "libucontext-$LIBUCONTEXT_VERSION" https://github.com/kaniini/libucontext.git libucontext
+
+WORKDIR /usr/src/libucontext
+RUN make libucontext.a
 
 WORKDIR /usr/src
 RUN git clone -b edera https://github.com/edera-dev/qemu.git qemu-xen
