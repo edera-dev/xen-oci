@@ -1,0 +1,67 @@
+.PHONY: all
+all:	build
+
+include common.mk
+
+INSTALL_PREFIX ?= /usr
+
+PATCHED := $(XEN_SRC)/.patched
+
+$(PATCHED): | $(XEN_SRC)
+	cd $(XEN_SRC) && sh ../apply-patches.sh ../patches $(XEN_VERSION) oxenstored
+	touch $@
+
+.PHONY: patch
+patch: $(PATCHED)
+
+# reconfigure xen source to build tools differently from xen itself
+XEN_CONFIGURE_OPTS ?= --prefix=$(INSTALL_PREFIX) \
+		  --disable-xen --enable-tools --disable-stubdom --disable-docs
+
+XEN_CONFIGURE := $(XEN_SRC)/config.status
+
+$(XEN_CONFIGURE): | $(XEN_SRC)
+	cd $(XEN_SRC) && ./configure $(XEN_CONFIGURE_OPTS)
+
+.PHONY: xen-configure
+xen-configure: $(XEN_CONFIGURE)
+
+TOOL_CFLAGS := -O2 -Wall -static -fPIC
+TOOL_LDFLAGS := -static
+TOOL_ARGS := all V=1 nosharedlibs=y
+
+XEN_TOOLS := call ctrl devicemodel foreignmemory gnttab guest evtchn \
+		 toolcore toollog
+
+# order is important
+TOOL_SUBDIRS := tools/include $(addprefix tools/libs/,$(XEN_TOOLS)) tools/ocaml
+
+tools/%: $(XEN_CONFIGURE)
+	$(MAKE) EXTRA_CFLAGS_XEN_TOOLS="$(TOOL_CFLAGS)" -j -C $(XEN_SRC)/$@ $(TOOL_ARGS)
+
+# oxenstored is simply built as one of the tools
+.PHONY: build
+build: $(TOOL_SUBDIRS)
+	strip $(XEN_SRC)/tools/ocaml/xenstored/oxenstored
+
+.PHONY: install
+install: build
+	sudo install -m 0644 oxenstored.service /usr/lib/systemd/system/oxenstored.service
+	cd /usr/lib/systemd/system && sudo ln -sf oxenstored.service xenstored.service
+	sudo install -m 0755 $(XEN_SRC)/tools/ocaml/xenstored/oxenstored /usr/sbin/oxenstored
+	sudo install -D -m 0644 $(XEN_SRC)/tools/ocaml/xenstored/oxenstored.conf /etc/xen/oxenstored.conf
+
+.PHONY: uninstall
+uninstall:
+	sudo rm -f /usr/lib/systemd/system/oxenstored.service
+	sudo rm -f /usr/lib/systemd/system/xenstored.service
+	sudo rm -f /usr/sbin/oxenstored
+	sudo rm -rf /etc/xen/oxenstored.conf
+
+.PHONY: clean
+clean:
+	make -C $(XEN_SRC) clean -j $(NPROC)
+
+.PHONY: distclean
+distclean:
+	make -C $(XEN_SRC) distclean -j $(NPROC)
