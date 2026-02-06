@@ -20,7 +20,7 @@ RUN git clone -b "$XEN_BRANCH" $XEN_REPO
 WORKDIR /usr/src/xen
 
 # patch build system
-RUN sh /usr/src/apply-patches.sh ${XEN_VERSION} oxenstored
+RUN sh /usr/src/apply-patches.sh /usr/src/patches ${XEN_VERSION} oxenstored
 
 # configure Xen build system
 RUN ./configure --prefix=/usr --disable-xen --enable-tools --disable-stubdom --disable-docs

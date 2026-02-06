@@ -1,0 +1,122 @@
+.PHONY: all
+all:	xen-tools libuc build
+
+include common.mk
+
+# meson.build in qemu relies on this
+export PKG_CONFIG_PATH += $(XEN_SRC)/tools/pkg-config
+
+QEMU_SRC := $(abspath qemu-xen)
+QEMU_URL ?= https://github.com/edera-dev/qemu.git
+QEMU_BRANCH ?= edera
+
+INSTALL_PREFIX ?= /opt/edera/qemu-xen
+
+$(INSTALL_PREFIX):
+	sudo mkdir --mode 0755 --parents $@
+	sudo chown $(shell id -un) $@
+
+# libucontext source configuration
+
+LIBUC_VERSION ?= 1.5
+LIBUC_SRC := $(abspath libucontext)
+LIBUC_BRANCH ?= libucontext-$(LIBUC_VERSION)
+LIBUC_URL ?= https://github.com/kaniini/libucontext.git
+
+$(LIBUC_SRC):
+	git clone -b $(LIBUC_BRANCH) $(LIBUC_URL) $@
+
+$(LIBUC_SRC)/libucontext.a: $(LIBUC_SRC)
+	cd $(LIBUC_SRC) && make libucontext.a
+
+.PHONY: libuc
+libuc: $(LIBUC_SRC)/libucontext.a
+
+# Xen soures configuration
+
+# reconfigure xen source to build tools differently from xen itself
+XEN_CONFIGURE_OPTS ?= --prefix=$(INSTALL_PREFIX) \
+		  --disable-xen --enable-tools --disable-stubdom --disable-docs
+
+XEN_CONFIGURE := $(XEN_SRC)/config.status
+
+$(XEN_CONFIGURE): | $(XEN_SRC)
+	cd $(XEN_SRC) && ./configure $(XEN_CONFIGURE_OPTS)
+
+.PHONY: xen-configure
+xen-configure: $(XEN_CONFIGURE)
+
+TOOL_CFLAGS := -O2 -Wall -static -DUSE_PTHREAD
+TOOL_ARGS := all V=1 nosharedlibs=y
+
+XEN_TOOLS := call ctrl devicemodel foreignmemory gnttab guest evtchn \
+		 toolcore toollog store
+
+# order is important
+TOOL_SUBDIRS := tools/include $(addprefix tools/libs/,$(XEN_TOOLS))
+
+tools/%: $(XEN_CONFIGURE)
+	$(MAKE) EXTRA_CFLAGS_XEN_TOOLS="$(TOOL_CFLAGS)" -j -C $(XEN_SRC)/$@ $(TOOL_ARGS)
+
+.PHONY: xen-tools
+xen-tools: $(TOOL_SUBDIRS)
+
+# QEMU source configuration
+
+QEMU_CONFIGURE := $(QEMU_SRC)/build/config.status
+
+$(QEMU_SRC):
+	git clone -b $(QEMU_BRANCH) $(QEMU_URL) $@
+
+.PHONY: qemu-src
+qemu-src: | $(QEMU_SRC)
+
+QEMU_PATCHED := $(QEMU_SRC)/.patched
+
+$(QEMU_PATCHED): | $(QEMU_SRC)
+	cd $(QEMU_SRC) && sh ../apply-patches.sh ../patches $(XEN_VERSION) qemu
+	touch $@
+
+.PHONY: qemu-patch
+qemu-patch: $(QEMU_PATCHED)
+
+QEMU_CFLAGS ?= -O2 -Wall -Wno-error \
+			   $(addprefix -I$(XEN_SRC)/tools/,include libxc xenstore)
+
+QEMU_LDFLAGS ?= $(addprefix -L$(XEN_SRC)/tools/libs/,$(XEN_TOOLS)) \
+				-lxencall -lxenstore -lxentoollog -lxendevicemodel -lxengnttab -lxenctrl \
+				$(LIBUC_SRC)/libucontext.a
+
+CONFIGURE_OPTS ?= --prefix=$(INSTALL_PREFIX) \
+				  --enable-xen --target-list=$(ARCH)-softmmu \
+				  --extra-cflags="$(QEMU_CFLAGS)" \
+				  --extra-ldflags="$(QEMU_LDFLAGS)" \
+				  --with-coroutine=ucontext --enable-coroutine-pool
+
+MESON_BUILD := $(QEMU_SRC)/meson.build
+
+$(QEMU_CONFIGURE): $(QEMU_PATCHED) $(MESON_BUILD)
+	cd $(QEMU_SRC) && ./configure $(CONFIGURE_OPTS)
+
+.PHONY: configure
+configure: $(QEMU_CONFIGURE)
+
+.PHONY: build
+build: libuc xen-tools $(QEMU_CONFIGURE)
+	$(MAKE) -C $(QEMU_SRC) -j $(NPROC)
+
+.PHONY: install
+install: build $(INSTALL_PREFIX)
+	$(MAKE) -C $(QEMU_SRC) install
+
+.PHONY: clean
+clean:
+	$(MAKE) -C $(LIBUC_SRC) clean
+	$(MAKE) -C $(XEN_SRC) clean
+	$(MAKE) -C $(QEMU_SRC) clean
+
+.PHONY: distclean
+distclean:
+	$(MAKE) -C $(LIBUC_SRC) clean
+	$(MAKE) -C $(XEN_SRC) distclean
+	$(MAKE) -C $(QEMU_SRC) distclean
