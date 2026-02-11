@@ -48,7 +48,7 @@ RUN git clone -b edera https://github.com/edera-dev/qemu.git qemu-xen
 WORKDIR /usr/src/qemu-xen
 
 # patch qemu
-RUN sh /usr/src/apply-patches.sh ${XEN_VERSION} qemu
+RUN sh /usr/src/apply-patches.sh /usr/src/patches ${XEN_VERSION} qemu
 
 COPY ./build-qemu.sh .
 RUN sh build-qemu.sh
