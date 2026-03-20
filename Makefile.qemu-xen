@@ -91,7 +91,8 @@ CONFIGURE_OPTS ?= --prefix=$(INSTALL_PREFIX) \
 				  --enable-xen --target-list=$(ARCH)-softmmu \
 				  --extra-cflags="$(QEMU_CFLAGS)" \
 				  --extra-ldflags="$(QEMU_LDFLAGS)" \
-				  --with-coroutine=ucontext --enable-coroutine-pool
+				  --with-coroutine=ucontext --enable-coroutine-pool \
+				  --disable-docs
 
 MESON_BUILD := $(QEMU_SRC)/meson.build
 
