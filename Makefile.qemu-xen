@@ -1,5 +1,5 @@
 .PHONY: all
-all:	xen-tools libuc build
+all:	build
 
 include common.mk
 
@@ -86,6 +86,8 @@ CONFIGURE_OPTS ?= --prefix=$(INSTALL_PREFIX) \
 				  --disable-docs
 
 MESON_BUILD := $(QEMU_SRC)/meson.build
+
+$(MESON_BUILD): | $(QEMU_SRC)
 
 $(QEMU_CONFIGURE): $(MESON_BUILD)
 	cd $(QEMU_SRC) && ./configure $(CONFIGURE_OPTS)
