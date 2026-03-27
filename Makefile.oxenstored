@@ -5,15 +5,6 @@ include common.mk
 
 INSTALL_PREFIX ?= /usr
 
-PATCHED := $(XEN_SRC)/.patched
-
-$(PATCHED): | $(XEN_SRC)
-	cd $(XEN_SRC) && sh ../apply-patches.sh ../patches $(XEN_VERSION) oxenstored
-	touch $@
-
-.PHONY: patch
-patch: $(PATCHED)
-
 # reconfigure xen source to build tools differently from xen itself
 XEN_CONFIGURE_OPTS ?= --prefix=$(INSTALL_PREFIX) \
 		  --disable-xen --enable-tools --disable-stubdom --disable-docs

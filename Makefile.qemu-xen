@@ -71,15 +71,6 @@ $(QEMU_SRC):
 .PHONY: qemu-src
 qemu-src: | $(QEMU_SRC)
 
-QEMU_PATCHED := $(QEMU_SRC)/.patched
-
-$(QEMU_PATCHED): | $(QEMU_SRC)
-	cd $(QEMU_SRC) && sh ../apply-patches.sh ../patches $(XEN_VERSION) qemu
-	touch $@
-
-.PHONY: qemu-patch
-qemu-patch: $(QEMU_PATCHED)
-
 QEMU_CFLAGS ?= -O2 -Wall -Wno-error \
 			   $(addprefix -I$(XEN_SRC)/tools/,include libxc xenstore)
 
@@ -96,7 +87,7 @@ CONFIGURE_OPTS ?= --prefix=$(INSTALL_PREFIX) \
 
 MESON_BUILD := $(QEMU_SRC)/meson.build
 
-$(QEMU_CONFIGURE): $(QEMU_PATCHED) $(MESON_BUILD)
+$(QEMU_CONFIGURE): $(MESON_BUILD)
 	cd $(QEMU_SRC) && ./configure $(CONFIGURE_OPTS)
 
 .PHONY: configure
