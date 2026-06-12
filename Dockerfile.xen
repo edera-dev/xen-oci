@@ -23,6 +23,11 @@ ENV CFLAGS=-Wno-error
 RUN ./configure --prefix=/usr --enable-xen --disable-tools --disable-stubdom --disable-docs
 COPY configs/xen-x86_64.config ./xen/.config
 RUN make -C xen olddefconfig
+# Fail loudly if olddefconfig silently dropped a feature we require (e.g.
+# MEM_SHARING needs CONFIG_UNSUPPORTED=y to be settable). Without this, a
+# missing feature only surfaces as a confusing runtime -EOPNOTSUPP.
+RUN grep -qx 'CONFIG_MEM_SHARING=y' xen/.config || \
+  (echo "ERROR: CONFIG_MEM_SHARING was dropped by olddefconfig (check CONFIG_UNSUPPORTED)" && exit 1)
 RUN make -j$(nproc) xen
 RUN make install-xen
 RUN mkdir /xenboot; ([ -f /boot/xen ] && cp /boot/xen /xenboot/xen) || \
