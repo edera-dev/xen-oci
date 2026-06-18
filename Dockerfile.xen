@@ -1,7 +1,8 @@
 FROM alpine:3.21@sha256:a8560b36e8b8210634f77d9f7f9efd7ffa463e380b75e2e74aff4511df3ef88c AS build
-ARG XEN_VERSION=4.19.1
+ARG XEN_VERSION=4.21
 ARG XEN_REPO=https://github.com/edera-dev/xen.git
 ARG XEN_BRANCH=edera/$XEN_VERSION
+ARG TARGETARCH
 WORKDIR /usr/src
 
 # build dependencies
@@ -21,13 +22,15 @@ RUN find . \( -name '*.mk' -o -name 'Make*' \) -exec sed -i -e 's/-Werror//g' {}
 # build Xen hypervisor
 ENV CFLAGS=-Wno-error
 RUN ./configure --prefix=/usr --enable-xen --disable-tools --disable-stubdom --disable-docs
-COPY configs/xen-x86_64.config ./xen/.config
+COPY configs/xen-${TARGETARCH}.config ./xen/.config
 RUN make -C xen olddefconfig
 # Fail loudly if olddefconfig silently dropped a feature we require (e.g.
 # MEM_SHARING needs CONFIG_UNSUPPORTED=y to be settable). Without this, a
 # missing feature only surfaces as a confusing runtime -EOPNOTSUPP.
-RUN grep -qx 'CONFIG_MEM_SHARING=y' xen/.config || \
-  (echo "ERROR: CONFIG_MEM_SHARING was dropped by olddefconfig (check CONFIG_UNSUPPORTED)" && exit 1)
+RUN if [ "$TARGETARCH" = "amd64" ]; then \
+      grep -qx 'CONFIG_MEM_SHARING=y' xen/.config || \
+      (echo "ERROR: CONFIG_MEM_SHARING was dropped by olddefconfig (check CONFIG_UNSUPPORTED)" && exit 1); \
+      fi
 RUN make -j$(nproc) xen
 RUN make install-xen
 RUN mkdir /xenboot; ([ -f /boot/xen ] && cp /boot/xen /xenboot/xen) || \
