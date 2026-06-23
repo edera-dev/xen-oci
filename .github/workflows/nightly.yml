@@ -53,7 +53,8 @@ jobs:
       with:
         file: ./Dockerfile.${{ matrix.component }}
         target: build
-        platforms: linux/amd64,linux/arm64
+        # single platform to only read source/commit metadata once, still sbom's all arches
+        platforms: linux/amd64
         build-args: XEN_VERSION=4.21
         load: true
         tags: sbom-scan-${{ matrix.component }}:latest
