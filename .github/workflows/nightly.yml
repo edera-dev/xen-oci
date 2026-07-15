@@ -26,7 +26,24 @@ jobs:
         submodules: recursive
     - uses: sigstore/cosign-installer@faadad0cce49287aee09b3a48701e75088a2c6ad # v4.0.0
     - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
+    - name: allow unprivileged user namespaces
+      # Ubuntu 24.04 runner images restrict unprivileged user namespace
+      # creation via AppArmor; rootless buildkitd requires it.
+      run: |
+        if [ "$(sudo sysctl -n kernel.apparmor_restrict_unprivileged_userns 2>/dev/null)" = "1" ]; then
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+        fi
     - uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
+      # Rootless buildkit: RUN steps execute as an unprivileged user inside a
+      # user namespace (still uid 0 in-image, so artifact ownership does not
+      # change). Among other things this makes /dev/null a host bind mount
+      # the build cannot delete or replace - a build once smuggled an ELF
+      # object into /dev/null and poisoned every compiler probe that read it
+      # afterwards. (Bump the image pin manually: dependabot does not track
+      # driver-opts images.)
+      with:
+        driver-opts: image=moby/buildkit:v0.31.1-rootless@sha256:946cf909534b789c9b84af75e6d4f8cb23c3b9cb387daec5ba0f4878a3e4647c
+        buildkitd-flags: --oci-worker-no-process-sandbox
     - uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3.6.0
       with:
         registry: ghcr.io

@@ -55,9 +55,15 @@ RUN find . \( -name '*.mk' -o -name 'Make*' \) -exec sed -i -e 's/-Werror//g' {}
 
 # build Xen hypervisor
 ENV CFLAGS=-Wno-error
-RUN ./configure --prefix=/usr --enable-xen --disable-tools --disable-stubdom --disable-docs
+# Every step that invokes the compiler wrappers implicitly starts the
+# sccache background server, and under rootless buildkit RUN steps have no
+# pid namespace (--oci-worker-no-process-sandbox), so a lingering daemon
+# keeps the step's container alive until the server's idle timeout - stop
+# it explicitly instead.
+RUN ./configure --prefix=/usr --enable-xen --disable-tools --disable-stubdom --disable-docs && \
+    sccache --stop-server >/dev/null 2>&1 || true
 COPY configs/xen-${TARGETARCH}.config ./xen/.config
-RUN make -C xen olddefconfig
+RUN make -C xen olddefconfig && sccache --stop-server >/dev/null 2>&1 || true
 # Fail loudly if olddefconfig silently dropped a feature we require (e.g.
 # MEM_SHARING needs CONFIG_UNSUPPORTED=y to be settable). Without this, a
 # missing feature only surfaces as a confusing runtime -EOPNOTSUPP.
@@ -69,8 +75,8 @@ RUN if [ "$TARGETARCH" = "amd64" ]; then \
 # an empty connection string fails sccache server startup rather than
 # falling back to the local cache.
 RUN --mount=type=secret,id=sccache_conn,env=SCCACHE_AZURE_CONNECTION_STRING \
-    sh -ec '[ -n "${SCCACHE_AZURE_CONNECTION_STRING:-}" ] || unset SCCACHE_AZURE_CONNECTION_STRING SCCACHE_AZURE_BLOB_CONTAINER; make -j"$(nproc)" xen; sccache --show-stats || true'
-RUN make install-xen
+    sh -ec '[ -n "${SCCACHE_AZURE_CONNECTION_STRING:-}" ] || unset SCCACHE_AZURE_CONNECTION_STRING SCCACHE_AZURE_BLOB_CONTAINER; make -j"$(nproc)" xen; sccache --show-stats || true; sccache --stop-server >/dev/null 2>&1 || true'
+RUN make install-xen && sccache --stop-server >/dev/null 2>&1 || true
 RUN mkdir /xenboot; ([ -f /boot/xen ] && cp /boot/xen /xenboot/xen) || \
   ([ -f /boot/xen.gz ] && cp /boot/xen.gz /xenboot/xen.gz)
 
