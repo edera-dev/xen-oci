@@ -46,7 +46,15 @@ ARG SCCACHE_AZURE_RW_MODE=READ_WRITE
 ENV XEN_VERSION=${XEN_VERSION}
 ENV XEN_BRANCH=${XEN_BRANCH}
 ENV XEN_REPO=${XEN_REPO}
-RUN git clone -b "$XEN_BRANCH" $XEN_REPO
+# git's multi-threaded index-pack races against qemu-user's guest-memory
+# handling ("fatal: cannot pread pack file: Bad address", an intermittent
+# EFAULT), so single-thread it - but only when this stage actually runs
+# under emulation; native builds keep the parallel fast path.
+ARG BUILDPLATFORM
+ARG TARGETPLATFORM
+RUN GIT_PACK_THREADS=""; \
+    [ "$TARGETPLATFORM" = "$BUILDPLATFORM" ] || GIT_PACK_THREADS="-c pack.threads=1"; \
+    git $GIT_PACK_THREADS clone -b "$XEN_BRANCH" $XEN_REPO
 
 WORKDIR /usr/src/xen
 
