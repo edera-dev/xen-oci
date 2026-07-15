@@ -32,13 +32,26 @@ jobs:
         registry: ghcr.io
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
+    - name: configure sccache
+      id: sccache
+      uses: edera-dev/actions/configure-azure-sccache@f92635e9fe8739c2b8a78fa87e9c8567bfa81b9c # v0.0.15
+      with:
+        connection-string-rw: ${{ secrets.SCCACHE_AZURE_CONNECTION_STRING }}
+        connection-string-ro: ${{ secrets.SCCACHE_AZURE_CONNECTION_STRING_RO }}
+        key-prefix: xen
     - uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
       id: push-step
+      env:
+        SCCACHE_AZURE_CONNECTION_STRING: ${{ steps.sccache.outputs.connection-string }}
       with:
         file: ./Dockerfile.${{ matrix.component }}
         platforms: linux/amd64,linux/aarch64
         tags: ghcr.io/edera-dev/${{ matrix.component }}:nightly
-        build-args: XEN_VERSION=4.21
+        build-args: |
+          XEN_VERSION=4.21
+          SCCACHE_AZURE_RW_MODE=${{ steps.sccache.outputs.rw-mode }}
+        secret-envs: |
+          sccache_conn=SCCACHE_AZURE_CONNECTION_STRING
         push: true
     - name: Sign the image
       env:
@@ -49,12 +62,20 @@ jobs:
 
     - name: Build `build` stage for SBOM scan
       uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
+      env:
+        SCCACHE_AZURE_CONNECTION_STRING: ${{ steps.sccache.outputs.connection-string }}
       with:
         file: ./Dockerfile.${{ matrix.component }}
         target: build
         # single platform to only read source/commit metadata once, still sbom's all arches
         platforms: linux/amd64
-        build-args: XEN_VERSION=4.21
+        # build-args must match the main build exactly, or the ARG mismatch
+        # busts the layer cache and this rebuilds the world.
+        build-args: |
+          XEN_VERSION=4.21
+          SCCACHE_AZURE_RW_MODE=${{ steps.sccache.outputs.rw-mode }}
+        secret-envs: |
+          sccache_conn=SCCACHE_AZURE_CONNECTION_STRING
         load: true
         tags: sbom-scan-${{ matrix.component }}:latest
     - uses: anchore/sbom-action/download-syft@36a5fde73e0fcb1d1e70be9ad66b4724e783bda7
