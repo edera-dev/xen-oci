@@ -15,7 +15,6 @@ jobs:
       matrix:
         component:
         - xen
-        - oxenstored
         - qemu-xen
     name: oci build ${{ matrix.component }}
     steps:
