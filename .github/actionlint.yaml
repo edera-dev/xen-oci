@@ -1,0 +1,5 @@
+self-hosted-runner:
+  # Org-defined GitHub-hosted larger runner; not in actionlint's builtin
+  # label list.
+  labels:
+    - edera-large

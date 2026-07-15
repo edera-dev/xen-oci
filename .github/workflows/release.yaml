@@ -21,11 +21,9 @@ jobs:
         - 4.21
         component:
         - xen
-        - oxenstored
-        - qemu-xen
     name: oci build ${{ matrix.component }}-${{ matrix.release }}
     steps:
-    - uses: step-security/harden-runner@95d9a5deda9de15063e7595e9719c11c38c90ae2 # v2.13.2
+    - uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
       with:
         egress-policy: audit
     - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
@@ -33,7 +31,24 @@ jobs:
         submodules: recursive
     - uses: sigstore/cosign-installer@faadad0cce49287aee09b3a48701e75088a2c6ad # v4.0.0
     - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
+    - name: allow unprivileged user namespaces
+      # Ubuntu 24.04 runner images restrict unprivileged user namespace
+      # creation via AppArmor; rootless buildkitd requires it.
+      run: |
+        if [ "$(sudo sysctl -n kernel.apparmor_restrict_unprivileged_userns 2>/dev/null)" = "1" ]; then
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+        fi
     - uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
+      # Rootless buildkit: RUN steps execute as an unprivileged user inside a
+      # user namespace (still uid 0 in-image, so artifact ownership does not
+      # change). Among other things this makes /dev/null a host bind mount
+      # the build cannot delete or replace - a build once smuggled an ELF
+      # object into /dev/null and poisoned every compiler probe that read it
+      # afterwards. (Bump the image pin manually: dependabot does not track
+      # driver-opts images.)
+      with:
+        driver-opts: image=moby/buildkit:v0.31.1-rootless@sha256:946cf909534b789c9b84af75e6d4f8cb23c3b9cb387daec5ba0f4878a3e4647c
+        buildkitd-flags: --oci-worker-no-process-sandbox
     - uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3.6.0
       with:
         registry: ghcr.io
@@ -49,13 +64,22 @@ jobs:
         MAJOR_MINOR=$(echo "$VERSION" | cut -d. -f1,2)
 
         if [ "$(printf '%s\n' "4.20" "$MAJOR_MINOR" | sort -V | head -n1)" = "$MAJOR_MINOR" ] && [ "$MAJOR_MINOR" != "4.21" ]; then
-          echo "name=RELEASE-${VERSION}" >> $GITHUB_OUTPUT
+          echo "name=RELEASE-${VERSION}" >> "$GITHUB_OUTPUT"
         else
-          echo "name=edera/${VERSION}" >> $GITHUB_OUTPUT
+          echo "name=edera/${VERSION}" >> "$GITHUB_OUTPUT"
         fi
 
+    - name: configure sccache
+      id: sccache
+      uses: edera-dev/actions/configure-azure-sccache@f92635e9fe8739c2b8a78fa87e9c8567bfa81b9c # v0.0.15
+      with:
+        connection-string-rw: ${{ secrets.SCCACHE_AZURE_CONNECTION_STRING }}
+        connection-string-ro: ${{ secrets.SCCACHE_AZURE_CONNECTION_STRING_RO }}
+        key-prefix: xen
     - uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
       id: push-step
+      env:
+        SCCACHE_AZURE_CONNECTION_STRING: ${{ steps.sccache.outputs.connection-string }}
       with:
         file: ./Dockerfile.${{ matrix.component }}
         platforms: linux/amd64,linux/aarch64
@@ -63,6 +87,9 @@ jobs:
         build-args: |
           XEN_VERSION=${{ matrix.release }}
           XEN_BRANCH=${{ steps.branch.outputs.name }}
+          SCCACHE_AZURE_RW_MODE=${{ steps.sccache.outputs.rw-mode }}
+        secret-envs: |
+          sccache_conn=SCCACHE_AZURE_CONNECTION_STRING
         push: true
     - name: Sign the image
       env:
@@ -73,13 +100,20 @@ jobs:
 
     - name: Build `build` stage for SBOM scan
       uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
+      env:
+        SCCACHE_AZURE_CONNECTION_STRING: ${{ steps.sccache.outputs.connection-string }}
       with:
         file: ./Dockerfile.${{ matrix.component }}
         target: build
         platforms: linux/amd64
+        # build-args must match the main build exactly, or the ARG mismatch
+        # busts the layer cache and this rebuilds the world.
         build-args: |
           XEN_VERSION=${{ matrix.release }}
           XEN_BRANCH=${{ steps.branch.outputs.name }}
+          SCCACHE_AZURE_RW_MODE=${{ steps.sccache.outputs.rw-mode }}
+        secret-envs: |
+          sccache_conn=SCCACHE_AZURE_CONNECTION_STRING
         load: true
         tags: sbom-scan-${{ matrix.component }}:latest
     - uses: anchore/sbom-action/download-syft@36a5fde73e0fcb1d1e70be9ad66b4724e783bda7

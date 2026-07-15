@@ -1,3 +1,6 @@
+# check=skip=SecretsUsedInArgOrEnv
+# (false positive: SCCACHE_AZURE_KEY_PREFIX is a cache namespace, not a key,
+# but sccache dictates the env name and the checker pattern-matches on "KEY")
 FROM alpine:3.21@sha256:a8560b36e8b8210634f77d9f7f9efd7ffa463e380b75e2e74aff4511df3ef88c AS build
 ARG XEN_VERSION=4.21
 ARG XEN_REPO=https://github.com/edera-dev/xen.git
@@ -8,11 +11,50 @@ WORKDIR /usr/src
 # build dependencies
 RUN apk update && apk add build-base git flex bison python3 gnu-efi
 
+# Shared Azure-backed compile cache (see edera-dev/actions/configure-azure-sccache).
+# The wrappers must reference the real compiler by absolute path:
+# /usr/lib/sccache is first in PATH, so a bare compiler name would resolve
+# back to the wrapper itself and recurse.
+ARG SCCACHE_VERSION=0.16.0
+ARG SCCACHE_SHA256_AMD64=aec995a83ad3dff3d14b6314e08858b7b73d35ca85a5bcf3d3a9ec07dee35588
+ARG SCCACHE_SHA256_ARM64=f73a5c39f96bb6ebb89cc7915cf182260d4cbf30765322c5e793d0fe8bd80784
+RUN case "${TARGETARCH}" in \
+      amd64) SCCACHE_ARCH=x86_64 SCCACHE_SHA256="${SCCACHE_SHA256_AMD64}" ;; \
+      arm64) SCCACHE_ARCH=aarch64 SCCACHE_SHA256="${SCCACHE_SHA256_ARM64}" ;; \
+      *) echo "unsupported TARGETARCH ${TARGETARCH}" >&2; exit 1 ;; \
+    esac && \
+    SCCACHE_DIST="sccache-v${SCCACHE_VERSION}-${SCCACHE_ARCH}-unknown-linux-musl" && \
+    wget -q -O /tmp/sccache.tar.gz "https://github.com/mozilla/sccache/releases/download/v${SCCACHE_VERSION}/${SCCACHE_DIST}.tar.gz" && \
+    echo "${SCCACHE_SHA256}  /tmp/sccache.tar.gz" | sha256sum -c - && \
+    tar -xz -C /tmp -f /tmp/sccache.tar.gz && \
+    install -m 0755 "/tmp/${SCCACHE_DIST}/sccache" /usr/local/bin/sccache && \
+    rm -rf /tmp/sccache.tar.gz "/tmp/${SCCACHE_DIST}" && \
+    mkdir -p /usr/lib/sccache && \
+    for compiler in cc c++ gcc g++; do \
+      [ -x "/usr/bin/${compiler}" ] || continue; \
+      printf '#!/bin/sh\nexec /usr/local/bin/sccache /usr/bin/%s "$@"\n' "${compiler}" >"/usr/lib/sccache/${compiler}"; \
+      chmod 0755 "/usr/lib/sccache/${compiler}"; \
+    done
+ENV PATH="/usr/lib/sccache:${PATH}"
+# Non-secret cache config; the connection string arrives only through a
+# BuildKit secret mount on the compile step and never persists in the image.
+ARG SCCACHE_AZURE_BLOB_CONTAINER=sccache
+ARG SCCACHE_AZURE_KEY_PREFIX=xen
+ARG SCCACHE_AZURE_RW_MODE=READ_WRITE
+
 # check out xen sources
 ENV XEN_VERSION=${XEN_VERSION}
 ENV XEN_BRANCH=${XEN_BRANCH}
 ENV XEN_REPO=${XEN_REPO}
-RUN git clone -b "$XEN_BRANCH" $XEN_REPO
+# git's multi-threaded index-pack races against qemu-user's guest-memory
+# handling ("fatal: cannot pread pack file: Bad address", an intermittent
+# EFAULT), so single-thread it - but only when this stage actually runs
+# under emulation; native builds keep the parallel fast path.
+ARG BUILDPLATFORM
+ARG TARGETPLATFORM
+RUN GIT_PACK_THREADS=""; \
+    [ "$TARGETPLATFORM" = "$BUILDPLATFORM" ] || GIT_PACK_THREADS="-c pack.threads=1"; \
+    git $GIT_PACK_THREADS clone -b "$XEN_BRANCH" $XEN_REPO
 
 WORKDIR /usr/src/xen
 
@@ -21,9 +63,15 @@ RUN find . \( -name '*.mk' -o -name 'Make*' \) -exec sed -i -e 's/-Werror//g' {}
 
 # build Xen hypervisor
 ENV CFLAGS=-Wno-error
-RUN ./configure --prefix=/usr --enable-xen --disable-tools --disable-stubdom --disable-docs
+# Every step that invokes the compiler wrappers implicitly starts the
+# sccache background server, and under rootless buildkit RUN steps have no
+# pid namespace (--oci-worker-no-process-sandbox), so a lingering daemon
+# keeps the step's container alive until the server's idle timeout - stop
+# it explicitly instead.
+RUN ./configure --prefix=/usr --enable-xen --disable-tools --disable-stubdom --disable-docs && \
+    sccache --stop-server >/dev/null 2>&1 || true
 COPY configs/xen-${TARGETARCH}.config ./xen/.config
-RUN make -C xen olddefconfig
+RUN make -C xen olddefconfig && sccache --stop-server >/dev/null 2>&1 || true
 # Fail loudly if olddefconfig silently dropped a feature we require (e.g.
 # MEM_SHARING needs CONFIG_UNSUPPORTED=y to be settable). Without this, a
 # missing feature only surfaces as a confusing runtime -EOPNOTSUPP.
@@ -31,8 +79,12 @@ RUN if [ "$TARGETARCH" = "amd64" ]; then \
       grep -qx 'CONFIG_MEM_SHARING=y' xen/.config || \
       (echo "ERROR: CONFIG_MEM_SHARING was dropped by olddefconfig (check CONFIG_UNSUPPORTED)" && exit 1); \
       fi
-RUN make -j$(nproc) xen
-RUN make install-xen
+# Without credentials (e.g. local builds), drop the Azure config entirely:
+# an empty connection string fails sccache server startup rather than
+# falling back to the local cache.
+RUN --mount=type=secret,id=sccache_conn,env=SCCACHE_AZURE_CONNECTION_STRING \
+    sh -ec '[ -n "${SCCACHE_AZURE_CONNECTION_STRING:-}" ] || unset SCCACHE_AZURE_CONNECTION_STRING SCCACHE_AZURE_BLOB_CONTAINER; make -j"$(nproc)" xen; sccache --show-stats || true; sccache --stop-server >/dev/null 2>&1 || true'
+RUN make install-xen && sccache --stop-server >/dev/null 2>&1 || true
 RUN mkdir /xenboot; ([ -f /boot/xen ] && cp /boot/xen /xenboot/xen) || \
   ([ -f /boot/xen.gz ] && cp /boot/xen.gz /xenboot/xen.gz)
 
