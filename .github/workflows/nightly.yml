@@ -21,11 +21,11 @@ jobs:
     - uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
       with:
         egress-policy: audit
-    - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+    - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       with:
         submodules: recursive
-    - uses: sigstore/cosign-installer@faadad0cce49287aee09b3a48701e75088a2c6ad # v4.0.0
-    - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
+    - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+    - uses: docker/setup-qemu-action@96fe6ef7f33517b61c61be40b68a1882f3264fb8 # v4.2.0
     - name: allow unprivileged user namespaces
       # Ubuntu 24.04 runner images restrict unprivileged user namespace
       # creation via AppArmor; rootless buildkitd requires it.
@@ -33,7 +33,7 @@ jobs:
         if [ "$(sudo sysctl -n kernel.apparmor_restrict_unprivileged_userns 2>/dev/null)" = "1" ]; then
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
         fi
-    - uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
+    - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
       # Rootless buildkit: RUN steps execute as an unprivileged user inside a
       # user namespace (still uid 0 in-image, so artifact ownership does not
       # change). Among other things this makes /dev/null a host bind mount
@@ -44,7 +44,7 @@ jobs:
       with:
         driver-opts: image=moby/buildkit:v0.31.1-rootless@sha256:946cf909534b789c9b84af75e6d4f8cb23c3b9cb387daec5ba0f4878a3e4647c
         buildkitd-flags: --oci-worker-no-process-sandbox
-    - uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3.6.0
+    - uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4.4.0
       with:
         registry: ghcr.io
         username: ${{ github.actor }}
@@ -56,7 +56,7 @@ jobs:
         connection-string-rw: ${{ secrets.SCCACHE_AZURE_CONNECTION_STRING }}
         connection-string-ro: ${{ secrets.SCCACHE_AZURE_CONNECTION_STRING_RO }}
         key-prefix: xen
-    - uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
+    - uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
       id: push-step
       env:
         SCCACHE_AZURE_CONNECTION_STRING: ${{ steps.sccache.outputs.connection-string }}
@@ -78,7 +78,7 @@ jobs:
       run: cosign sign --yes "${TAGS}@${DIGEST}"
 
     - name: Build `build` stage for SBOM scan
-      uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
+      uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
       env:
         SCCACHE_AZURE_CONNECTION_STRING: ${{ steps.sccache.outputs.connection-string }}
       with:
@@ -95,7 +95,7 @@ jobs:
           sccache_conn=SCCACHE_AZURE_CONNECTION_STRING
         load: true
         tags: sbom-scan-${{ matrix.component }}:latest
-    - uses: anchore/sbom-action/download-syft@36a5fde73e0fcb1d1e70be9ad66b4724e783bda7
+    - uses: anchore/sbom-action/download-syft@26ca99d710488389d655c50441b85fbf22179c0b
       id: syft
     # Build CycloneDX SBOM without build dependencies
     - name: Generate and attest CycloneDX SBOM
