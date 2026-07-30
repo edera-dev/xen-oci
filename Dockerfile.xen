@@ -91,10 +91,17 @@ ENV CFLAGS=-Wno-error
 # pid namespace (--oci-worker-no-process-sandbox), so a lingering daemon
 # keeps the step's container alive until the server's idle timeout - stop
 # it explicitly instead.
-RUN ./configure --prefix=/usr --enable-xen --disable-tools --disable-stubdom --disable-docs && \
-    sccache --stop-server >/dev/null 2>&1 || true
+#
+# Each step is `sh -ec 'real-work; sccache --stop-server ... || true'` so the
+# `|| true` guards only the stop-server call. Written as
+# `real-work && stop-server || true` the whole step exits 0 even when the real
+# work failed, because `A && B || true` swallows a failing A. That masked a
+# broken configure/olddefconfig all the way to the compile step, which then
+# died with a baffling "No rule to make target 'include/config/auto.conf'".
+RUN sh -ec './configure --prefix=/usr --enable-xen --disable-tools --disable-stubdom --disable-docs; \
+    sccache --stop-server >/dev/null 2>&1 || true'
 COPY configs/xen-${TARGETARCH}.config ./xen/.config
-RUN make -C xen olddefconfig && sccache --stop-server >/dev/null 2>&1 || true
+RUN sh -ec 'make -C xen olddefconfig; sccache --stop-server >/dev/null 2>&1 || true'
 # Fail loudly if olddefconfig silently dropped a feature we require (e.g.
 # MEM_SHARING needs CONFIG_UNSUPPORTED=y to be settable). Without this, a
 # missing feature only surfaces as a confusing runtime -EOPNOTSUPP.
@@ -107,7 +114,7 @@ RUN if [ "$TARGETARCH" = "amd64" ]; then \
 # falling back to the local cache.
 RUN --mount=type=secret,id=sccache_conn,env=SCCACHE_AZURE_CONNECTION_STRING \
     sh -ec '[ -n "${SCCACHE_AZURE_CONNECTION_STRING:-}" ] || unset SCCACHE_AZURE_CONNECTION_STRING SCCACHE_AZURE_BLOB_CONTAINER; make -j"$(nproc)" xen; sccache --show-stats || true; sccache --stop-server >/dev/null 2>&1 || true'
-RUN make install-xen && sccache --stop-server >/dev/null 2>&1 || true
+RUN sh -ec 'make install-xen; sccache --stop-server >/dev/null 2>&1 || true'
 RUN mkdir /xenboot; ([ -f /boot/xen ] && cp /boot/xen /xenboot/xen) || \
   ([ -f /boot/xen.gz ] && cp /boot/xen.gz /xenboot/xen.gz)
 
