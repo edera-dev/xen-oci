@@ -52,9 +52,32 @@ ENV XEN_REPO=${XEN_REPO}
 # under emulation; native builds keep the parallel fast path.
 ARG BUILDPLATFORM
 ARG TARGETPLATFORM
+# fetch rather than clone -b: `clone -b` only resolves branch and tag names,
+# while a fetch of an explicit ref also accepts a full 40-character commit
+# SHA (GitHub serves those via uploadpack.allowReachableSHA1InWant). That
+# lets XEN_BRANCH pin an exact commit, which is what makes a branch build
+# reproducible after the branch tip has moved on. Abbreviated SHAs are not
+# fetchable and will fail here.
+# HEAD ends up detached at the fetched commit; everything downstream that
+# reads git (xen/tools/scmversion, the SBOM step's rev-parse) only looks at
+# HEAD, so the detached state is fine.
+#
+# Do NOT add --depth 1 here. It looks like free bandwidth (~8MB fetched
+# instead of ~116MB) and it works on amd64, but under qemu-user emulation it
+# broke the linux/arm64 kconfig host-tool build: `HOSTCC tools/kconfig/conf.o`
+# produced no dependency file, which surfaced as the misleading
+# "fixdep: error opening file: tools/kconfig/.conf.o.d" because kbuild's
+# cmd_and_fixdep chains with `;` and runs fixdep even when the compile fails.
+# The mechanism is still unexplained - the checked-out tree is byte-identical
+# either way - but the failure was reproducible in CI 3/3 and vanished when
+# the depth limit was dropped.
 RUN GIT_PACK_THREADS=""; \
     [ "$TARGETPLATFORM" = "$BUILDPLATFORM" ] || GIT_PACK_THREADS="-c pack.threads=1"; \
-    git $GIT_PACK_THREADS clone -b "$XEN_BRANCH" $XEN_REPO
+    mkdir xen && \
+    git -C xen init -q && \
+    git -C xen remote add origin "$XEN_REPO" && \
+    git -C xen $GIT_PACK_THREADS fetch -q origin "$XEN_BRANCH" && \
+    git -C xen checkout -q FETCH_HEAD
 
 WORKDIR /usr/src/xen
 
