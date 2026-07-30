@@ -11,14 +11,6 @@ on:
         description: 'Branch, tag, or full 40-char commit SHA in the Xen repo'
         type: string
         required: true
-      platforms:
-        description: 'Target platforms'
-        type: choice
-        options:
-        - linux/amd64
-        - linux/amd64,linux/aarch64
-        default: linux/amd64
-        required: true
       publish:
         description: 'Push the image (uncheck to only check that it builds)'
         type: boolean
@@ -33,9 +25,11 @@ concurrency:
   cancel-in-progress: true
 jobs:
   build:
-    # edera-large only pays for itself on the emulated aarch64 half; amd64-only
-    # dev iteration is fine on a hosted runner.
-    runs-on: ${{ inputs.platforms == 'linux/amd64' && 'ubuntu-latest' || 'edera-large' }}
+    # amd64-only, so no emulation and no need for the edera-large runner. To
+    # restore aarch64: add linux/aarch64 to `platforms` below, re-add
+    # docker/setup-qemu-action before setup-buildx, and move back to
+    # edera-large - the emulated half is far too slow for a hosted runner.
+    runs-on: ubuntu-latest
     name: oci build xen (${{ inputs.xen_ref }})
     steps:
     - uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
@@ -44,7 +38,6 @@ jobs:
     - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       with:
         submodules: recursive
-    - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
     - name: allow unprivileged user namespaces
       # Ubuntu 24.04 runner images restrict unprivileged user namespace
       # creation via AppArmor; rootless buildkitd requires it.
@@ -85,7 +78,7 @@ jobs:
       id: push-step
       with:
         file: ./Dockerfile.xen
-        platforms: ${{ inputs.platforms }}
+        platforms: linux/amd64
         tags: ghcr.io/edera-dev/xen:${{ steps.tag.outputs.name }}
         build-args: |
           XEN_VERSION=4.21
