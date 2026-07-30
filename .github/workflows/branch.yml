@@ -1,0 +1,86 @@
+name: branch build
+# Publish ghcr.io/edera-dev/xen:branch-<ref> from an arbitrary ref of
+# edera-dev/xen, so a feature branch can be tested without first landing it on
+# edera/4.21 (all `nightly` ever builds). No cosign signature and no SBOM:
+# both roughly double the wall clock and mean nothing for a throwaway tag.
+# Anything promoted to a release goes through release.yaml, which does sign.
+on:
+  workflow_dispatch:
+    inputs:
+      xen_ref:
+        description: 'Branch, tag, or full 40-char commit SHA in the Xen repo'
+        type: string
+        required: true
+      publish:
+        description: 'Push the image (uncheck to only check that it builds)'
+        type: boolean
+        default: true
+        required: true
+permissions:
+  contents: read
+  packages: write
+concurrency:
+  # One build per ref; a re-dispatch supersedes an in-flight one.
+  group: ${{ github.workflow }}-${{ inputs.xen_ref }}
+  cancel-in-progress: true
+jobs:
+  build:
+    # amd64-only, so no emulation and no need for the edera-large runner. To
+    # restore aarch64: add linux/aarch64 to `platforms` below, re-add
+    # docker/setup-qemu-action before setup-buildx, and move back to
+    # edera-large - the emulated half is far too slow for a hosted runner.
+    runs-on: ubuntu-latest
+    name: oci build xen (${{ inputs.xen_ref }})
+    steps:
+    - uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+      with:
+        egress-policy: audit
+    - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      with:
+        submodules: recursive
+    - name: allow unprivileged user namespaces
+      # Ubuntu 24.04 runner images restrict unprivileged user namespace
+      # creation via AppArmor; rootless buildkitd requires it.
+      run: |
+        if [ "$(sudo sysctl -n kernel.apparmor_restrict_unprivileged_userns 2>/dev/null)" = "1" ]; then
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+        fi
+    - uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
+      # Keep this pin in lockstep with nightly.yml/release.yaml - see the long
+      # rootless-buildkit note there for why the driver image is pinned by
+      # digest and why dependabot will not bump it for you.
+      with:
+        driver-opts: image=moby/buildkit:v0.31.1-rootless@sha256:946cf909534b789c9b84af75e6d4f8cb23c3b9cb387daec5ba0f4878a3e4647c
+        buildkitd-flags: --oci-worker-no-process-sandbox
+    - uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3.6.0
+      if: ${{ inputs.publish }}
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    - name: Compute image tag
+      id: tag
+      # Slashes are legal in a git ref but not in an OCI tag, where they would
+      # read as registry path separators; map them (and anything else illegal)
+      # the way linux-kernel-oci does in hack/build/util.py. Needs a step
+      # because Actions expressions have no replace().
+      env:
+        XEN_REF: ${{ inputs.xen_ref }}
+      run: echo "name=branch-$(printf '%s' "${XEN_REF}" | tr -c 'a-zA-Z0-9._-' '_')" >> "${GITHUB_OUTPUT}"
+    # No sccache wiring here for now. Without a connection string the Dockerfile
+    # drops the Azure config and sccache falls back to a local, per-build cache,
+    # so every branch build compiles Xen cold - slower, but it keeps this
+    # workflow off the shared cache while the arm64 HOSTCC failure is
+    # unexplained. To restore: re-add the edera-dev/actions/configure-azure-sccache
+    # step with key-prefix xen, and put back the SCCACHE_AZURE_CONNECTION_STRING
+    # env, the SCCACHE_AZURE_RW_MODE build-arg, and the secret-envs mapping.
+    - uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
+      id: push-step
+      with:
+        file: ./Dockerfile.xen
+        platforms: linux/amd64
+        tags: ghcr.io/edera-dev/xen:${{ steps.tag.outputs.name }}
+        build-args: |
+          XEN_VERSION=4.21
+          XEN_BRANCH=${{ inputs.xen_ref }}
+        push: ${{ inputs.publish }}

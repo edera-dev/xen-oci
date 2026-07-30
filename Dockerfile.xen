@@ -52,9 +52,32 @@ ENV XEN_REPO=${XEN_REPO}
 # under emulation; native builds keep the parallel fast path.
 ARG BUILDPLATFORM
 ARG TARGETPLATFORM
+# fetch rather than clone -b: `clone -b` only resolves branch and tag names,
+# while a fetch of an explicit ref also accepts a full 40-character commit
+# SHA (GitHub serves those via uploadpack.allowReachableSHA1InWant). That
+# lets XEN_BRANCH pin an exact commit, which is what makes a branch build
+# reproducible after the branch tip has moved on. Abbreviated SHAs are not
+# fetchable and will fail here.
+# HEAD ends up detached at the fetched commit; everything downstream that
+# reads git (xen/tools/scmversion, the SBOM step's rev-parse) only looks at
+# HEAD, so the detached state is fine.
+#
+# Do NOT add --depth 1 here. It looks like free bandwidth (~8MB fetched
+# instead of ~116MB) and it works on amd64, but under qemu-user emulation it
+# broke the linux/arm64 kconfig host-tool build: `HOSTCC tools/kconfig/conf.o`
+# produced no dependency file, which surfaced as the misleading
+# "fixdep: error opening file: tools/kconfig/.conf.o.d" because kbuild's
+# cmd_and_fixdep chains with `;` and runs fixdep even when the compile fails.
+# The mechanism is still unexplained - the checked-out tree is byte-identical
+# either way - but the failure was reproducible in CI 3/3 and vanished when
+# the depth limit was dropped.
 RUN GIT_PACK_THREADS=""; \
     [ "$TARGETPLATFORM" = "$BUILDPLATFORM" ] || GIT_PACK_THREADS="-c pack.threads=1"; \
-    git $GIT_PACK_THREADS clone -b "$XEN_BRANCH" $XEN_REPO
+    mkdir xen && \
+    git -C xen init -q && \
+    git -C xen remote add origin "$XEN_REPO" && \
+    git -C xen $GIT_PACK_THREADS fetch -q origin "$XEN_BRANCH" && \
+    git -C xen checkout -q FETCH_HEAD
 
 WORKDIR /usr/src/xen
 
@@ -68,10 +91,17 @@ ENV CFLAGS=-Wno-error
 # pid namespace (--oci-worker-no-process-sandbox), so a lingering daemon
 # keeps the step's container alive until the server's idle timeout - stop
 # it explicitly instead.
-RUN ./configure --prefix=/usr --enable-xen --disable-tools --disable-stubdom --disable-docs && \
-    sccache --stop-server >/dev/null 2>&1 || true
+#
+# Each step is `sh -ec 'real-work; sccache --stop-server ... || true'` so the
+# `|| true` guards only the stop-server call. Written as
+# `real-work && stop-server || true` the whole step exits 0 even when the real
+# work failed, because `A && B || true` swallows a failing A. That masked a
+# broken configure/olddefconfig all the way to the compile step, which then
+# died with a baffling "No rule to make target 'include/config/auto.conf'".
+RUN sh -ec './configure --prefix=/usr --enable-xen --disable-tools --disable-stubdom --disable-docs; \
+    sccache --stop-server >/dev/null 2>&1 || true'
 COPY configs/xen-${TARGETARCH}.config ./xen/.config
-RUN make -C xen olddefconfig && sccache --stop-server >/dev/null 2>&1 || true
+RUN sh -ec 'make -C xen olddefconfig; sccache --stop-server >/dev/null 2>&1 || true'
 # Fail loudly if olddefconfig silently dropped a feature we require (e.g.
 # MEM_SHARING needs CONFIG_UNSUPPORTED=y to be settable). Without this, a
 # missing feature only surfaces as a confusing runtime -EOPNOTSUPP.
@@ -84,7 +114,7 @@ RUN if [ "$TARGETARCH" = "amd64" ]; then \
 # falling back to the local cache.
 RUN --mount=type=secret,id=sccache_conn,env=SCCACHE_AZURE_CONNECTION_STRING \
     sh -ec '[ -n "${SCCACHE_AZURE_CONNECTION_STRING:-}" ] || unset SCCACHE_AZURE_CONNECTION_STRING SCCACHE_AZURE_BLOB_CONTAINER; make -j"$(nproc)" xen; sccache --show-stats || true; sccache --stop-server >/dev/null 2>&1 || true'
-RUN make install-xen && sccache --stop-server >/dev/null 2>&1 || true
+RUN sh -ec 'make install-xen; sccache --stop-server >/dev/null 2>&1 || true'
 RUN mkdir /xenboot; ([ -f /boot/xen ] && cp /boot/xen /xenboot/xen) || \
   ([ -f /boot/xen.gz ] && cp /boot/xen.gz /xenboot/xen.gz)
 
