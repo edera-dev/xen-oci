@@ -15,12 +15,20 @@ RUN apk update && apk add build-base git flex bison python3 gnu-efi
 # The wrappers must reference the real compiler by absolute path:
 # /usr/lib/sccache is first in PATH, so a bare compiler name would resolve
 # back to the wrapper itself and recurse.
+#
+# The wrappers also use a different SCCACHE_SERVER_PORT per architecture, because sccache
+# is client/server over 127.0.0.1, so on the default port 4226 the two platform legs of a
+# multi-platform build fight over one daemon, which can cause the wrong cache
+# results to be served to the wrong arch..
+#
+# `sccache` itself is wrapped too so the bare --show-stats / --stop-server
+# calls in the build steps address their own leg's daemon.
 ARG SCCACHE_VERSION=0.16.0
 ARG SCCACHE_SHA256_AMD64=aec995a83ad3dff3d14b6314e08858b7b73d35ca85a5bcf3d3a9ec07dee35588
 ARG SCCACHE_SHA256_ARM64=f73a5c39f96bb6ebb89cc7915cf182260d4cbf30765322c5e793d0fe8bd80784
 RUN case "${TARGETARCH}" in \
-      amd64) SCCACHE_ARCH=x86_64 SCCACHE_SHA256="${SCCACHE_SHA256_AMD64}" ;; \
-      arm64) SCCACHE_ARCH=aarch64 SCCACHE_SHA256="${SCCACHE_SHA256_ARM64}" ;; \
+      amd64) SCCACHE_ARCH=x86_64 SCCACHE_SHA256="${SCCACHE_SHA256_AMD64}" SCCACHE_PORT=4226 ;; \
+      arm64) SCCACHE_ARCH=aarch64 SCCACHE_SHA256="${SCCACHE_SHA256_ARM64}" SCCACHE_PORT=4326 ;; \
       *) echo "unsupported TARGETARCH ${TARGETARCH}" >&2; exit 1 ;; \
     esac && \
     SCCACHE_DIST="sccache-v${SCCACHE_VERSION}-${SCCACHE_ARCH}-unknown-linux-musl" && \
@@ -30,9 +38,13 @@ RUN case "${TARGETARCH}" in \
     install -m 0755 "/tmp/${SCCACHE_DIST}/sccache" /usr/local/bin/sccache && \
     rm -rf /tmp/sccache.tar.gz "/tmp/${SCCACHE_DIST}" && \
     mkdir -p /usr/lib/sccache && \
+    printf '#!/bin/sh\nexport SCCACHE_SERVER_PORT=%s\nexec /usr/local/bin/sccache "$@"\n' \
+      "${SCCACHE_PORT}" >/usr/lib/sccache/sccache && \
+    chmod 0755 /usr/lib/sccache/sccache && \
     for compiler in cc c++ gcc g++; do \
       [ -x "/usr/bin/${compiler}" ] || continue; \
-      printf '#!/bin/sh\nexec /usr/local/bin/sccache /usr/bin/%s "$@"\n' "${compiler}" >"/usr/lib/sccache/${compiler}"; \
+      printf '#!/bin/sh\nexport SCCACHE_SERVER_PORT=%s\nexec /usr/local/bin/sccache /usr/bin/%s "$@"\n' \
+        "${SCCACHE_PORT}" "${compiler}" >"/usr/lib/sccache/${compiler}"; \
       chmod 0755 "/usr/lib/sccache/${compiler}"; \
     done
 ENV PATH="/usr/lib/sccache:${PATH}"
