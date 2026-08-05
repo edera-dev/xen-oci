@@ -65,7 +65,7 @@ jobs:
         platforms: linux/amd64,linux/aarch64
         tags: ghcr.io/edera-dev/${{ matrix.component }}:nightly
         build-args: |
-          XEN_VERSION=4.21
+          XEN_VERSION=4.22
           SCCACHE_AZURE_RW_MODE=${{ steps.sccache.outputs.rw-mode }}
         secret-envs: |
           sccache_conn=SCCACHE_AZURE_CONNECTION_STRING
@@ -89,7 +89,7 @@ jobs:
         # build-args must match the main build exactly, or the ARG mismatch
         # busts the layer cache and this rebuilds the world.
         build-args: |
-          XEN_VERSION=4.21
+          XEN_VERSION=4.22
           SCCACHE_AZURE_RW_MODE=${{ steps.sccache.outputs.rw-mode }}
         secret-envs: |
           sccache_conn=SCCACHE_AZURE_CONNECTION_STRING
@@ -104,7 +104,7 @@ jobs:
         TAGS: ghcr.io/edera-dev/${{ matrix.component }}:nightly
         SYFT_CMD: ${{ steps.syft.outputs.cmd }}
         COMPONENT: ${{ matrix.component }}
-        XEN_VERSION: "4.21"
+        XEN_VERSION: "4.22"
         COSIGN_EXPERIMENTAL: "true"
       run: |
         set -euo pipefail

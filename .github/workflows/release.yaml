@@ -19,6 +19,7 @@ jobs:
         - 4.20.0
         - 4.20.1
         - 4.21
+        - 4.22
         component:
         - xen
     name: oci build ${{ matrix.component }}-${{ matrix.release }}
@@ -63,7 +64,7 @@ jobs:
         VERSION="${{ matrix.release }}"
         MAJOR_MINOR=$(echo "$VERSION" | cut -d. -f1,2)
 
-        if [ "$(printf '%s\n' "4.20" "$MAJOR_MINOR" | sort -V | head -n1)" = "$MAJOR_MINOR" ] && [ "$MAJOR_MINOR" != "4.21" ]; then
+        if [ "$(printf '%s\n' "4.20" "$MAJOR_MINOR" | sort -V | head -n1)" = "$MAJOR_MINOR" ] && [ "$MAJOR_MINOR" != "4.21" ] && [ "$MAJOR_MINOR" != "4.22" ]; then
           echo "name=RELEASE-${VERSION}" >> "$GITHUB_OUTPUT"
         else
           echo "name=edera/${VERSION}" >> "$GITHUB_OUTPUT"

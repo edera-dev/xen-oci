@@ -1,7 +1,7 @@
 name: branch build
 # Publish ghcr.io/edera-dev/xen:branch-<ref> from an arbitrary ref of
 # edera-dev/xen, so a feature branch can be tested without first landing it on
-# edera/4.21 (all `nightly` ever builds). No cosign signature and no SBOM:
+# edera/4.22 (all `nightly` ever builds). No cosign signature and no SBOM:
 # both roughly double the wall clock and mean nothing for a throwaway tag.
 # Anything promoted to a release goes through release.yaml, which does sign.
 on:
@@ -81,6 +81,6 @@ jobs:
         platforms: linux/amd64
         tags: ghcr.io/edera-dev/xen:${{ steps.tag.outputs.name }}
         build-args: |
-          XEN_VERSION=4.21
+          XEN_VERSION=4.22
           XEN_BRANCH=${{ inputs.xen_ref }}
         push: ${{ inputs.publish }}

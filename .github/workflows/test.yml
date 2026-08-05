@@ -59,7 +59,7 @@ jobs:
         file: ./Dockerfile.xen
         platforms: linux/amd64,linux/aarch64
         build-args: |
-          XEN_VERSION=4.21
+          XEN_VERSION=4.22
           SCCACHE_AZURE_RW_MODE=${{ steps.sccache.outputs.rw-mode }}
         secret-envs: |
           sccache_conn=SCCACHE_AZURE_CONNECTION_STRING

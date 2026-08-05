@@ -3,7 +3,7 @@
 
 Reads from the environment (set by the SBOM workflow step):
   COMPONENT            xen | oxenstored | qemu-xen
-  XEN_VERSION          e.g. "4.21"
+  XEN_VERSION          e.g. "4.22"
   XEN_COMMIT           resolved commit of edera-dev/xen.git
   QEMU_COMMIT          resolved commit of edera-dev/qemu.git    (qemu-xen only)
   LIBUCONTEXT_COMMIT   resolved commit of libucontext           (qemu-xen only)
@@ -64,7 +64,7 @@ def xen_source(version, commit, patch_component):
     """The edera-dev/xen.git source. patch_component selects which series file
     (if any) patched the xen tree for this image; None means no xen patches.
 
-    The branch varies by release (edera/<ver> from 4.21, RELEASE-<ver> before),
+    The branch varies by release (edera/<ver> from 4.22, RELEASE-<ver> before),
     so it is read from XEN_BRANCH; the commit pins the source precisely either
     way, the branch is just human context in the distribution URL.
     """
