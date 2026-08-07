@@ -23,16 +23,22 @@ RUN apk update && apk add build-base git flex bison python3 gnu-efi
 #
 # `sccache` itself is wrapped too so the bare --show-stats / --stop-server
 # calls in the build steps address their own leg's daemon.
-ARG SCCACHE_VERSION=0.16.0
-ARG SCCACHE_SHA256_AMD64=aec995a83ad3dff3d14b6314e08858b7b73d35ca85a5bcf3d3a9ec07dee35588
-ARG SCCACHE_SHA256_ARM64=f73a5c39f96bb6ebb89cc7915cf182260d4cbf30765322c5e793d0fe8bd80784
+# Use the edera fork: upstream serves a stale cached object for any translation
+# unit using the assembler's `.incbin` or `.include`, because the file those name
+# is read by the assembler and so never appears in the preprocessor output sccache
+# hashes. Xen hits this through xen/tools/binfile, which embeds config.gz for
+# CONFIG_HYPFS_CONFIG and derives its size from labels, so the generated .S is
+# byte-identical no matter what the blob holds.
+ARG SCCACHE_VERSION=0.16.0-edera3
+ARG SCCACHE_SHA256_AMD64=06b5d11b457d0bc138736b29bee249ed048b1babd3d8fc8406231749a883a522
+ARG SCCACHE_SHA256_ARM64=b39e2e72082dfb9ea93694ee5b4cea9ccc57a74cae5147afed130eb966108c94
 RUN case "${TARGETARCH}" in \
       amd64) SCCACHE_ARCH=x86_64 SCCACHE_SHA256="${SCCACHE_SHA256_AMD64}" SCCACHE_PORT=4226 ;; \
       arm64) SCCACHE_ARCH=aarch64 SCCACHE_SHA256="${SCCACHE_SHA256_ARM64}" SCCACHE_PORT=4326 ;; \
       *) echo "unsupported TARGETARCH ${TARGETARCH}" >&2; exit 1 ;; \
     esac && \
     SCCACHE_DIST="sccache-v${SCCACHE_VERSION}-${SCCACHE_ARCH}-unknown-linux-musl" && \
-    wget -q -O /tmp/sccache.tar.gz "https://github.com/mozilla/sccache/releases/download/v${SCCACHE_VERSION}/${SCCACHE_DIST}.tar.gz" && \
+    wget -q -O /tmp/sccache.tar.gz "https://github.com/edera-dev/sccache/releases/download/v${SCCACHE_VERSION}/${SCCACHE_DIST}.tar.gz" && \
     echo "${SCCACHE_SHA256}  /tmp/sccache.tar.gz" | sha256sum -c - && \
     tar -xz -C /tmp -f /tmp/sccache.tar.gz && \
     install -m 0755 "/tmp/${SCCACHE_DIST}/sccache" /usr/local/bin/sccache && \
