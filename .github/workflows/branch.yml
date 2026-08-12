@@ -32,10 +32,10 @@ jobs:
     runs-on: ubuntu-latest
     name: oci build xen (${{ inputs.xen_ref }})
     steps:
-    - uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+    - uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40 # v2.20.1
       with:
         egress-policy: audit
-    - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       with:
         submodules: recursive
     - name: allow unprivileged user namespaces
@@ -45,14 +45,14 @@ jobs:
         if [ "$(sudo sysctl -n kernel.apparmor_restrict_unprivileged_userns 2>/dev/null)" = "1" ]; then
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
         fi
-    - uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
+    - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
       # Keep this pin in lockstep with nightly.yml/release.yaml - see the long
       # rootless-buildkit note there for why the driver image is pinned by
       # digest and why dependabot will not bump it for you.
       with:
         driver-opts: image=moby/buildkit:v0.31.1-rootless@sha256:946cf909534b789c9b84af75e6d4f8cb23c3b9cb387daec5ba0f4878a3e4647c
         buildkitd-flags: --oci-worker-no-process-sandbox
-    - uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3.6.0
+    - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
       if: ${{ inputs.publish }}
       with:
         registry: ghcr.io
@@ -74,7 +74,7 @@ jobs:
     # unexplained. To restore: re-add the edera-dev/actions/configure-azure-sccache
     # step with key-prefix xen, and put back the SCCACHE_AZURE_CONNECTION_STRING
     # env, the SCCACHE_AZURE_RW_MODE build-arg, and the secret-envs mapping.
-    - uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
+    - uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
       id: push-step
       with:
         file: ./Dockerfile.xen
