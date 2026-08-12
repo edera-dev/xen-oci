@@ -32,13 +32,18 @@ RUN apk update && apk add build-base git flex bison python3 gnu-efi
 ARG SCCACHE_VERSION=0.16.0-edera3
 ARG SCCACHE_SHA256_AMD64=06b5d11b457d0bc138736b29bee249ed048b1babd3d8fc8406231749a883a522
 ARG SCCACHE_SHA256_ARM64=b39e2e72082dfb9ea93694ee5b4cea9ccc57a74cae5147afed130eb966108c94
+# The download is retried in-shell because busybox wget has no --tries.
 RUN case "${TARGETARCH}" in \
       amd64) SCCACHE_ARCH=x86_64 SCCACHE_SHA256="${SCCACHE_SHA256_AMD64}" SCCACHE_PORT=4226 ;; \
       arm64) SCCACHE_ARCH=aarch64 SCCACHE_SHA256="${SCCACHE_SHA256_ARM64}" SCCACHE_PORT=4326 ;; \
       *) echo "unsupported TARGETARCH ${TARGETARCH}" >&2; exit 1 ;; \
     esac && \
     SCCACHE_DIST="sccache-v${SCCACHE_VERSION}-${SCCACHE_ARCH}-unknown-linux-musl" && \
-    wget -q -O /tmp/sccache.tar.gz "https://github.com/edera-dev/sccache/releases/download/v${SCCACHE_VERSION}/${SCCACHE_DIST}.tar.gz" && \
+    for attempt in 1 2 3 4 5; do \
+      wget -q -O /tmp/sccache.tar.gz "https://github.com/edera-dev/sccache/releases/download/v${SCCACHE_VERSION}/${SCCACHE_DIST}.tar.gz" && break; \
+      [ "${attempt}" -lt 5 ] || { echo "sccache download failed after ${attempt} attempts" >&2; exit 1; }; \
+      sleep 5; \
+    done && \
     echo "${SCCACHE_SHA256}  /tmp/sccache.tar.gz" | sha256sum -c - && \
     tar -xz -C /tmp -f /tmp/sccache.tar.gz && \
     install -m 0755 "/tmp/${SCCACHE_DIST}/sccache" /usr/local/bin/sccache && \
