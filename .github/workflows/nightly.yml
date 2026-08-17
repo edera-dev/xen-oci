@@ -17,7 +17,7 @@ jobs:
         - xen
     name: oci build ${{ matrix.component }}
     steps:
-    - uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40 # v2.20.1
+    - uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
       with:
         egress-policy: audit
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -94,7 +94,7 @@ jobs:
           sccache_conn=SCCACHE_AZURE_CONNECTION_STRING
         load: true
         tags: sbom-scan-${{ matrix.component }}:latest
-    - uses: anchore/sbom-action/download-syft@04151451f829cb881fd7b3250eccf4021433e14e
+    - uses: anchore/sbom-action/download-syft@52542941bb775adef77f7a51ff5ea984e600fab8
       id: syft
     # Build CycloneDX SBOM without build dependencies
     - name: Generate and attest CycloneDX SBOM
