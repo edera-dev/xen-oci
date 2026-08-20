@@ -127,10 +127,14 @@ COPY configs/xen-${TARGETARCH}.config ./xen/.config
 RUN sh -ec 'make -C xen olddefconfig; sccache --stop-server >/dev/null 2>&1 || true'
 # Fail loudly if olddefconfig silently dropped a feature we require (e.g.
 # MEM_SHARING needs CONFIG_UNSUPPORTED=y to be settable). Without this, a
-# missing feature only surfaces as a confusing runtime -EOPNOTSUPP.
+# missing feature only surfaces as a confusing runtime -EOPNOTSUPP, or -- for
+# KVM_GUEST -- as nothing at all: Xen would simply keep calibrating against an
+# emulated timer and nobody would know the driver had been dropped.
 RUN if [ "$TARGETARCH" = "amd64" ]; then \
       grep -qx 'CONFIG_MEM_SHARING=y' xen/.config || \
       (echo "ERROR: CONFIG_MEM_SHARING was dropped by olddefconfig (check CONFIG_UNSUPPORTED)" && exit 1); \
+      grep -qx 'CONFIG_KVM_GUEST=y' xen/.config || \
+      (echo "ERROR: CONFIG_KVM_GUEST was dropped by olddefconfig (needs a Xen with the KVM pvclock timesource)" && exit 1); \
       fi
 # Without credentials (e.g. local builds), drop the Azure config entirely:
 # an empty connection string fails sccache server startup rather than
