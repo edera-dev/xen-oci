@@ -2,20 +2,52 @@ name: nightly
 on:
   workflow_dispatch:
   schedule:
-  - cron: "0 0 * * 1"
+  - cron: "0 0 * * *"
 permissions:
   contents: read
   packages: write
   id-token: write
 jobs:
+  discover:
+    name: discover xen branches
+    runs-on: ubuntu-latest
+    outputs:
+      branches: ${{ steps.branches.outputs.list }}
+    steps:
+    - uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+      with:
+        egress-policy: audit
+    - name: List edera/* branches
+      id: branches
+      # Discovered rather than listed, so an edera/X.Y cut between runs is built
+      # without editing this file. release.yaml keeps its explicit matrix: it
+      # publishes the supported-version tags, which is a deliberate list.
+      # edera-dev/xen is public, so this needs no token.
+      #
+      # The ls-remote glob is not a filter: `*` spans slashes, so it also
+      # returns edera/foo-bar and edera/experimental/vpci. Only X.Y is a
+      # maintained branch, so the shape is enforced here.
+      run: |
+        set -euo pipefail
+        branches="$(git ls-remote --heads https://github.com/edera-dev/xen.git 'refs/heads/edera/*' \
+          | sed 's#.*refs/heads/##' | grep -E '^edera/[0-9]+\.[0-9]+$' | sort -V)"
+        if [ -z "${branches}" ]; then
+          echo "::error::no edera/* branches found in edera-dev/xen"
+          exit 1
+        fi
+        echo "${branches}"
+        printf 'list=%s\n' \
+          "$(printf '%s\n' "${branches}" | jq -Rsc 'split("\n") | map(select(length > 0))')" \
+          >> "${GITHUB_OUTPUT}"
+
   build:
+    needs: discover
     runs-on: edera-large
     strategy:
       fail-fast: false
       matrix:
-        component:
-        - xen
-    name: oci build ${{ matrix.component }}
+        branch: ${{ fromJSON(needs.discover.outputs.branches) }}
+    name: oci build xen (${{ matrix.branch }})
     steps:
     - uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40 # v2.20.1
       with:
@@ -48,6 +80,20 @@ jobs:
         registry: ghcr.io
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
+    - name: Compute image tag
+      id: ref
+      # Slashes are legal in a git ref but not in an OCI tag, where they would
+      # read as registry path separators; map them (and anything else illegal)
+      # the way branch.yml does. Needs a step because Actions expressions have
+      # no replace().
+      env:
+        XEN_BRANCH: ${{ matrix.branch }}
+      run: |
+        set -euo pipefail
+        {
+          echo "tag=nightly-$(printf '%s' "${XEN_BRANCH}" | tr -c 'a-zA-Z0-9._-' '_')"
+          echo "version=${XEN_BRANCH#edera/}"
+        } >> "${GITHUB_OUTPUT}"
     - name: configure sccache
       id: sccache
       uses: edera-dev/actions/configure-azure-sccache@6e6996f6fff5d6016bcdc097e9065da6fb33ac7f # v0.0.17
@@ -60,11 +106,12 @@ jobs:
       env:
         SCCACHE_AZURE_CONNECTION_STRING: ${{ steps.sccache.outputs.connection-string }}
       with:
-        file: ./Dockerfile.${{ matrix.component }}
+        file: ./Dockerfile.xen
         platforms: linux/amd64,linux/aarch64
-        tags: ghcr.io/edera-dev/${{ matrix.component }}:nightly
+        tags: ghcr.io/edera-dev/xen:${{ steps.ref.outputs.tag }}
         build-args: |
-          XEN_VERSION=4.22
+          XEN_VERSION=${{ steps.ref.outputs.version }}
+          XEN_BRANCH=${{ matrix.branch }}
           SCCACHE_AZURE_RW_MODE=${{ steps.sccache.outputs.rw-mode }}
         secret-envs: |
           sccache_conn=SCCACHE_AZURE_CONNECTION_STRING
@@ -72,7 +119,7 @@ jobs:
     - name: Sign the image
       env:
         DIGEST: ${{ steps.push-step.outputs.digest }}
-        TAGS: ghcr.io/edera-dev/${{ matrix.component }}:nightly
+        TAGS: ghcr.io/edera-dev/xen:${{ steps.ref.outputs.tag }}
         COSIGN_EXPERIMENTAL: "true"
       run: cosign sign --yes "${TAGS}@${DIGEST}"
 
@@ -81,29 +128,31 @@ jobs:
       env:
         SCCACHE_AZURE_CONNECTION_STRING: ${{ steps.sccache.outputs.connection-string }}
       with:
-        file: ./Dockerfile.${{ matrix.component }}
+        file: ./Dockerfile.xen
         target: build
         # single platform to only read source/commit metadata once, still sbom's all arches
         platforms: linux/amd64
         # build-args must match the main build exactly, or the ARG mismatch
         # busts the layer cache and this rebuilds the world.
         build-args: |
-          XEN_VERSION=4.22
+          XEN_VERSION=${{ steps.ref.outputs.version }}
+          XEN_BRANCH=${{ matrix.branch }}
           SCCACHE_AZURE_RW_MODE=${{ steps.sccache.outputs.rw-mode }}
         secret-envs: |
           sccache_conn=SCCACHE_AZURE_CONNECTION_STRING
         load: true
         tags: sbom-scan-${{ matrix.component }}:latest
-    - uses: anchore/sbom-action/download-syft@04151451f829cb881fd7b3250eccf4021433e14e
+    - uses: anchore/sbom-action/download-syft@36a5fde73e0fcb1d1e70be9ad66b4724e783bda7
       id: syft
     # Build CycloneDX SBOM without build dependencies
     - name: Generate and attest CycloneDX SBOM
       env:
         DIGEST: ${{ steps.push-step.outputs.digest }}
-        TAGS: ghcr.io/edera-dev/${{ matrix.component }}:nightly
+        TAGS: ghcr.io/edera-dev/xen:${{ steps.ref.outputs.tag }}
         SYFT_CMD: ${{ steps.syft.outputs.cmd }}
-        COMPONENT: ${{ matrix.component }}
-        XEN_VERSION: "4.22"
+        COMPONENT: xen
+        XEN_VERSION: ${{ steps.ref.outputs.version }}
+        XEN_BRANCH: ${{ matrix.branch }}
         COSIGN_EXPERIMENTAL: "true"
       run: |
         set -euo pipefail
@@ -112,12 +161,6 @@ jobs:
         # Resolve the exact source commit(s) the build checked out
         XEN_COMMIT="$(docker run --rm "${scan}" git -C /usr/src/xen rev-parse HEAD)"
         export XEN_COMMIT
-        if [ "${COMPONENT}" = "qemu-xen" ]; then
-          QEMU_COMMIT="$(docker run --rm "${scan}" git -C /usr/src/qemu-xen rev-parse HEAD)"
-          LIBUCONTEXT_COMMIT="$(docker run --rm "${scan}" git -C /usr/src/libucontext rev-parse HEAD)"
-          LIBUCONTEXT_VERSION="$(docker run --rm "${scan}" printenv LIBUCONTEXT_VERSION)"
-          export QEMU_COMMIT LIBUCONTEXT_COMMIT LIBUCONTEXT_VERSION
-        fi
 
         # Catalog the runtime apk packages that actually ship
         "${SYFT_CMD}" "registry:${TAGS}@${DIGEST}" \
