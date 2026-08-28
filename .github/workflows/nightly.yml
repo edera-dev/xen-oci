@@ -14,7 +14,7 @@ jobs:
     outputs:
       branches: ${{ steps.branches.outputs.list }}
     steps:
-    - uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+    - uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
       with:
         egress-policy: audit
     - name: List edera/* branches
@@ -49,7 +49,7 @@ jobs:
         branch: ${{ fromJSON(needs.discover.outputs.branches) }}
     name: oci build xen (${{ matrix.branch }})
     steps:
-    - uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40 # v2.20.1
+    - uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
       with:
         egress-policy: audit
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -64,7 +64,7 @@ jobs:
         if [ "$(sudo sysctl -n kernel.apparmor_restrict_unprivileged_userns 2>/dev/null)" = "1" ]; then
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
         fi
-    - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
+    - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
       # Rootless buildkit: RUN steps execute as an unprivileged user inside a
       # user namespace (still uid 0 in-image, so artifact ownership does not
       # change). Among other things this makes /dev/null a host bind mount
@@ -142,7 +142,7 @@ jobs:
           sccache_conn=SCCACHE_AZURE_CONNECTION_STRING
         load: true
         tags: sbom-scan-${{ matrix.component }}:latest
-    - uses: anchore/sbom-action/download-syft@36a5fde73e0fcb1d1e70be9ad66b4724e783bda7
+    - uses: anchore/sbom-action/download-syft@52542941bb775adef77f7a51ff5ea984e600fab8
       id: syft
     # Build CycloneDX SBOM without build dependencies
     - name: Generate and attest CycloneDX SBOM
