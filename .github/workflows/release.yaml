@@ -117,7 +117,7 @@ jobs:
           sccache_conn=SCCACHE_AZURE_CONNECTION_STRING
         load: true
         tags: sbom-scan-${{ matrix.component }}:latest
-    - uses: anchore/sbom-action/download-syft@52542941bb775adef77f7a51ff5ea984e600fab8
+    - uses: anchore/sbom-action/download-syft@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26
       id: syft
     # Emit a curated CycloneDX SBOM: source, applied patches, 
     # and qemu-xen's apk sysroot
