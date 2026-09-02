@@ -24,7 +24,7 @@ jobs:
         - xen
     name: oci build ${{ matrix.component }}-${{ matrix.release }}
     steps:
-    - uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+    - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
       with:
         egress-policy: audit
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -117,7 +117,7 @@ jobs:
           sccache_conn=SCCACHE_AZURE_CONNECTION_STRING
         load: true
         tags: sbom-scan-${{ matrix.component }}:latest
-    - uses: anchore/sbom-action/download-syft@52542941bb775adef77f7a51ff5ea984e600fab8
+    - uses: anchore/sbom-action/download-syft@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26
       id: syft
     # Emit a curated CycloneDX SBOM: source, applied patches, 
     # and qemu-xen's apk sysroot
