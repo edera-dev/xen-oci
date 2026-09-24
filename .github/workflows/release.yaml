@@ -14,10 +14,6 @@ jobs:
       fail-fast: false
       matrix:
         release:
-        - 4.19.0
-        - 4.19.1
-        - 4.20.0
-        - 4.20.1
         - 4.21
         - 4.22
         component:
@@ -56,19 +52,9 @@ jobs:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
 
-      # these are all built against upstream RELEASE-X.X.X branches, and patch them.
-      # Starting with 4.21, we build against `edera/X.X.X` branches, which integrated patches.
     - name: Determine XEN_BRANCH
       id: branch
-      run: |
-        VERSION="${{ matrix.release }}"
-        MAJOR_MINOR=$(echo "$VERSION" | cut -d. -f1,2)
-
-        if [ "$(printf '%s\n' "4.20" "$MAJOR_MINOR" | sort -V | head -n1)" = "$MAJOR_MINOR" ] && [ "$MAJOR_MINOR" != "4.21" ] && [ "$MAJOR_MINOR" != "4.22" ]; then
-          echo "name=RELEASE-${VERSION}" >> "$GITHUB_OUTPUT"
-        else
-          echo "name=edera/${VERSION}" >> "$GITHUB_OUTPUT"
-        fi
+      run: echo "name=edera/${{ matrix.release }}" >> "$GITHUB_OUTPUT"
 
     - name: configure sccache
       id: sccache

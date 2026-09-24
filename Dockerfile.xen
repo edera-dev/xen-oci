@@ -123,19 +123,20 @@ ENV CFLAGS=-Wno-error
 # died with a baffling "No rule to make target 'include/config/auto.conf'".
 RUN sh -ec './configure --prefix=/usr --enable-xen --disable-tools --disable-stubdom --disable-docs; \
     sccache --stop-server >/dev/null 2>&1 || true'
-COPY configs/xen-${TARGETARCH}.config ./xen/.config
+# Configs are savedefconfig output per major.minor, so point releases share
+# one, and a new branch fails here until someone picks its config.
+COPY configs/ /tmp/xen-configs/
+RUN cfg="/tmp/xen-configs/$(echo "$XEN_VERSION" | cut -d. -f1,2)/${TARGETARCH}.defconfig"; \
+    [ -f "$cfg" ] || { echo "ERROR: no Xen config for $XEN_VERSION/$TARGETARCH (expected $cfg)"; exit 1; }; \
+    cp "$cfg" xen/.config && cp "$cfg" /tmp/xen.defconfig
 RUN sh -ec 'make -C xen olddefconfig; sccache --stop-server >/dev/null 2>&1 || true'
 # Fail loudly if olddefconfig silently dropped a feature we require (e.g.
 # MEM_SHARING needs CONFIG_UNSUPPORTED=y to be settable). Without this, a
 # missing feature only surfaces as a confusing runtime -EOPNOTSUPP, or -- for
 # KVM_GUEST -- as nothing at all: Xen would simply keep calibrating against an
 # emulated timer and nobody would know the driver had been dropped.
-RUN if [ "$TARGETARCH" = "amd64" ]; then \
-      grep -qx 'CONFIG_MEM_SHARING=y' xen/.config || \
-      (echo "ERROR: CONFIG_MEM_SHARING was dropped by olddefconfig (check CONFIG_UNSUPPORTED)" && exit 1); \
-      grep -qx 'CONFIG_KVM_GUEST=y' xen/.config || \
-      (echo "ERROR: CONFIG_KVM_GUEST was dropped by olddefconfig (needs a Xen with the KVM pvclock timesource)" && exit 1); \
-      fi
+RUN missing="$(grep -vxFf xen/.config /tmp/xen.defconfig || true)"; \
+    [ -z "$missing" ] || { echo "ERROR: olddefconfig dropped or changed these settings:"; echo "$missing"; exit 1; }
 # Without credentials (e.g. local builds), drop the Azure config entirely:
 # an empty connection string fails sccache server startup rather than
 # falling back to the local cache.
