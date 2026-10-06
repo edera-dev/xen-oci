@@ -32,7 +32,7 @@ jobs:
     runs-on: ubuntu-latest
     name: oci build xen (${{ inputs.xen_ref }})
     steps:
-    - uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+    - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
       with:
         egress-policy: audit
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -45,7 +45,7 @@ jobs:
         if [ "$(sudo sysctl -n kernel.apparmor_restrict_unprivileged_userns 2>/dev/null)" = "1" ]; then
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
         fi
-    - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+    - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       # Keep this pin in lockstep with nightly.yml/release.yaml - see the long
       # rootless-buildkit note there for why the driver image is pinned by
       # digest and why dependabot will not bump it for you.
@@ -74,7 +74,7 @@ jobs:
     # unexplained. To restore: re-add the edera-dev/actions/configure-azure-sccache
     # step with key-prefix xen, and put back the SCCACHE_AZURE_CONNECTION_STRING
     # env, the SCCACHE_AZURE_RW_MODE build-arg, and the secret-envs mapping.
-    - uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+    - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
       id: push-step
       with:
         file: ./Dockerfile.xen
