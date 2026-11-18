@@ -1,0 +1,48 @@
+# CONFIG_INTEL is not set
+# CONFIG_HYGON is not set
+# CONFIG_PV is not set
+# CONFIG_HVM_COMPAT is not set
+# CONFIG_NESTED_VIRT is not set
+# CONFIG_VIRIDIAN is not set
+# CONFIG_HVM_PIRQ is not set
+CONFIG_MEM_SHARING=y
+# CONFIG_X86_HVM_PIT is not set
+# CONFIG_X86_HVM_PIC is not set
+# CONFIG_X86_HVM_RTC is not set
+# CONFIG_X86_HVM_HPET is not set
+# CONFIG_X86_HVM_PMTIMER is not set
+# CONFIG_X86_HVM_STDVGA is not set
+# CONFIG_PAGING_LOG_DIRTY is not set
+# CONFIG_VPMU is not set
+# CONFIG_RESOURCE_OP is not set
+# CONFIG_MCE_NONFATAL is not set
+# CONFIG_HOTADD is not set
+# CONFIG_CORE_PARKING is not set
+# CONFIG_EVTCHN_FIFO is not set
+# CONFIG_MEM_EXCHANGE is not set
+CONFIG_PDX_NONE=y
+# CONFIG_VM_EVENT is not set
+# CONFIG_HYPFS is not set
+# CONFIG_IOREQ_SERVER is not set
+# CONFIG_KEXEC is not set
+# CONFIG_SOFT_RESET is not set
+# CONFIG_SCHED_CREDIT2 is not set
+# CONFIG_LIVEPATCH is not set
+CONFIG_ENFORCE_UNIQUE_SYMBOLS=y
+# CONFIG_TRACEBUFFER is not set
+# CONFIG_SYSTEM_SUSPEND is not set
+# CONFIG_DECOMPRESS_BZIP2 is not set
+# CONFIG_DECOMPRESS_LZMA is not set
+# CONFIG_DECOMPRESS_LZO is not set
+# CONFIG_SCHED_MGMT is not set
+# CONFIG_HOTPLUG_OPS is not set
+# CONFIG_PM_STATS is not set
+# CONFIG_ACPI_APEI is not set
+# CONFIG_HAS_EHCI is not set
+# CONFIG_AMD_CPPC is not set
+# CONFIG_CPUFREQ_GOV_ONDEMAND is not set
+# CONFIG_INTEL_IOMMU is not set
+# CONFIG_VGA is not set
+CONFIG_EXPERT=y
+# CONFIG_DEBUG_KEYS is not set
+# CONFIG_GDBSX is not set
